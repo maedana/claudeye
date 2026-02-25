@@ -138,24 +138,19 @@ impl eframe::App for CcMonitorApp {
             Err(_) => return, // poisoned mutex: polling thread panicked
         };
 
-        let has_approval = sessions.iter().any(|s| matches!(s.state, ClaudeState::WaitingForApproval));
-        if self.compact {
-            if has_approval {
-                ctx.request_repaint_after(std::time::Duration::from_millis(100));
-            } else if !sessions.is_empty() {
-                ctx.request_repaint_after(std::time::Duration::from_secs(1));
-            } else {
-                ctx.request_repaint_after(std::time::Duration::from_secs(REPAINT_INTERVAL_SECS));
+        let needs_fast_repaint = sessions.iter().any(|s| match s.state {
+            ClaudeState::Working => !self.compact,
+            ClaudeState::WaitingForApproval => true,
+            ClaudeState::Idle => {
+                (STALE_MIN_SECS..=STALE_MAX_SECS).contains(&s.state_changed_at.elapsed().as_secs())
             }
+        });
+        if needs_fast_repaint {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        } else if !sessions.is_empty() {
+            ctx.request_repaint_after(std::time::Duration::from_secs(1));
         } else {
-            let needs_fast_repaint = sessions.iter().any(|s| matches!(s.state, ClaudeState::Working | ClaudeState::WaitingForApproval));
-            if needs_fast_repaint {
-                ctx.request_repaint_after(std::time::Duration::from_millis(100));
-            } else if !sessions.is_empty() {
-                ctx.request_repaint_after(std::time::Duration::from_secs(1));
-            } else {
-                ctx.request_repaint_after(std::time::Duration::from_secs(REPAINT_INTERVAL_SECS));
-            }
+            ctx.request_repaint_after(std::time::Duration::from_secs(REPAINT_INTERVAL_SECS));
         }
 
         let time = ctx.input(|i| i.time);
@@ -200,7 +195,12 @@ impl eframe::App for CcMonitorApp {
                                 .size(12.0),
                         );
                     } else {
-                        render_compact_row(ui, &summaries, time);
+                        let stale_idle = sessions.iter().any(|s| {
+                            matches!(s.state, ClaudeState::Idle)
+                                && (STALE_MIN_SECS..=STALE_MAX_SECS)
+                                    .contains(&s.state_changed_at.elapsed().as_secs())
+                        });
+                        render_compact_row(ui, &summaries, time, stale_idle);
                     }
                 });
         } else {
@@ -279,13 +279,12 @@ fn measure_session_text_width(ctx: &egui::Context, session: &ClaudeSession) -> f
     })
 }
 
-fn calc_stroke_width(state: &ClaudeState, time: f64) -> f32 {
-    match state {
-        ClaudeState::WaitingForApproval => {
-            let pulse = ((time * 16.0).sin() as f32 + 1.0) / 2.0;
-            1.0 + pulse * 2.0
-        }
-        ClaudeState::Working | ClaudeState::Idle => 1.0,
+fn calc_stroke_width(time: f64, pulse: bool) -> f32 {
+    if pulse {
+        let p = ((time * 16.0).sin() as f32 + 1.0) / 2.0;
+        1.0 + p * 2.0
+    } else {
+        1.0
     }
 }
 
@@ -296,7 +295,11 @@ fn render_session_row(ui: &mut Ui, session: &ClaudeSession, time: f64) {
         ClaudeState::Idle => (Color32::from_gray(160), "Idle"),
     };
 
-    let stroke_width = calc_stroke_width(&session.state, time);
+    let elapsed = session.state_changed_at.elapsed().as_secs();
+    let pulse = matches!(session.state, ClaudeState::WaitingForApproval)
+        || (matches!(session.state, ClaudeState::Idle)
+            && (STALE_MIN_SECS..=STALE_MAX_SECS).contains(&elapsed));
+    let stroke_width = calc_stroke_width(time, pulse);
 
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
@@ -331,7 +334,6 @@ fn render_session_row(ui: &mut Ui, session: &ClaudeSession, time: f64) {
             .inner_margin(egui::Margin::symmetric(6.0, 2.0))
             .show(ui, |ui: &mut Ui| {
                 ui.set_max_width(max_label_width);
-                let elapsed = session.state_changed_at.elapsed().as_secs();
                 ui.label(
                     RichText::new(format!(
                         "{}  {}  [{}] {}s",
@@ -390,7 +392,7 @@ const COMPACT_GROUP_WIDTH: f32 = 70.0;
 /// Spacing between compact summary groups.
 const COMPACT_GROUP_SPACING: f32 = 4.0;
 
-fn render_compact_row(ui: &mut Ui, summaries: &[StateSummary], time: f64) {
+fn render_compact_row(ui: &mut Ui, summaries: &[StateSummary], time: f64, stale_idle: bool) {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = COMPACT_GROUP_SPACING;
         for summary in summaries {
@@ -400,7 +402,9 @@ fn render_compact_row(ui: &mut Ui, summaries: &[StateSummary], time: f64) {
                 ClaudeState::Idle => (Color32::from_gray(160), "Idle"),
             };
 
-            let stroke_width = calc_stroke_width(&summary.state, time);
+            let pulse = matches!(summary.state, ClaudeState::WaitingForApproval)
+                || (stale_idle && matches!(summary.state, ClaudeState::Idle));
+            let stroke_width = calc_stroke_width(time, pulse);
 
             // Mini robot art (same as render_session_row)
             ui.allocate_ui(egui::Vec2::new(40.0, ROW_HEIGHT), |ui| {
@@ -472,15 +476,9 @@ mod tests {
     use crate::tmux::PaneInfo;
 
     #[test]
-    fn stroke_width_working_is_always_one() {
-        assert_eq!(calc_stroke_width(&ClaudeState::Working, 0.0), 1.0);
-        assert_eq!(calc_stroke_width(&ClaudeState::Working, 5.0), 1.0);
-    }
-
-    #[test]
-    fn stroke_width_idle_is_always_one() {
-        assert_eq!(calc_stroke_width(&ClaudeState::Idle, 0.0), 1.0);
-        assert_eq!(calc_stroke_width(&ClaudeState::Idle, 5.0), 1.0);
+    fn stroke_width_no_pulse_is_always_one() {
+        assert_eq!(calc_stroke_width(0.0, false), 1.0);
+        assert_eq!(calc_stroke_width(5.0, false), 1.0);
     }
 
     #[test]
@@ -511,11 +509,11 @@ mod tests {
     }
 
     #[test]
-    fn stroke_width_approval_always_pulses_strongly() {
+    fn stroke_width_pulse_oscillates() {
         let mut saw_peak = false;
         for t in 0..100 {
             let time = t as f64 * 0.1;
-            let w = calc_stroke_width(&ClaudeState::WaitingForApproval, time);
+            let w = calc_stroke_width(time, true);
             assert!(w >= 1.0 && w <= 3.0, "got {w} at time {time}");
             if w > 2.5 {
                 saw_peak = true;
@@ -687,4 +685,5 @@ mod tests {
         ];
         assert!(!should_alert_on_stale(&sessions));
     }
+
 }

@@ -30,7 +30,7 @@ cargo install claudeye
 ## Usage
 
 ```sh
-claudeye [--compact] [--position <POSITION>]
+claudeye [--compact] [--position <POSITION>] [--alert-on-stale]
 claudeye picker
 ```
 
@@ -49,6 +49,7 @@ claudeye -p top-left
 |--------|-------------|
 | `--compact` | Show state summary with session counts |
 | `--position`, `-p` | Window position on screen (default: `top-center`). Values: `top-left`, `top-center`, `top-right`, `middle-left`, `middle-center`, `middle-right`, `bottom-left`, `bottom-center`, `bottom-right` |
+| `--alert-on-stale` | Move overlay to screen center when any session stays in Approval/Idle for 5–15 seconds, then return to its configured position |
 
 ![Overlay mode][1]
 
