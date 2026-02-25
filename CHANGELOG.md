@@ -8,6 +8,13 @@
   - Triggers for Approval/Idle sessions between 5–15 seconds of staleness
   - After 15 seconds the overlay returns to its configured position
 
+### Changed
+
+- `--compact` mode now shows state summary instead of cycling individual sessions
+  - Displays robot + speech bubble groups side by side (up to 3: Running / Approval / Idle)
+  - Each bubble shows the session count for that state; states with 0 sessions are hidden
+  - Repaint interval optimized: 100ms only when Approval pulse is active, 1s otherwise
+
 ## [0.3.0] - 2026-02-24
 
 ### Added

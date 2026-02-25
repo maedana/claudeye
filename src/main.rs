@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 #[derive(Parser)]
 #[command(about = "Claude session monitor overlay", version)]
 struct Args {
-    /// Show one session at a time, cycling every second
+    /// Show state summary with session counts
     #[arg(long)]
     compact: bool,
 
@@ -138,78 +138,127 @@ impl eframe::App for CcMonitorApp {
             Err(_) => return, // poisoned mutex: polling thread panicked
         };
 
-        let needs_fast_repaint = sessions.iter().any(|s| matches!(s.state, ClaudeState::Working | ClaudeState::WaitingForApproval));
-        if needs_fast_repaint || self.compact {
-            ctx.request_repaint_after(std::time::Duration::from_millis(100));
-        } else if !sessions.is_empty() {
-            // Repaint every second to keep elapsed time display up to date
-            ctx.request_repaint_after(std::time::Duration::from_secs(1));
+        let has_approval = sessions.iter().any(|s| matches!(s.state, ClaudeState::WaitingForApproval));
+        if self.compact {
+            if has_approval {
+                ctx.request_repaint_after(std::time::Duration::from_millis(100));
+            } else if !sessions.is_empty() {
+                ctx.request_repaint_after(std::time::Duration::from_secs(1));
+            } else {
+                ctx.request_repaint_after(std::time::Duration::from_secs(REPAINT_INTERVAL_SECS));
+            }
         } else {
-            ctx.request_repaint_after(std::time::Duration::from_secs(REPAINT_INTERVAL_SECS));
+            let needs_fast_repaint = sessions.iter().any(|s| matches!(s.state, ClaudeState::Working | ClaudeState::WaitingForApproval));
+            if needs_fast_repaint {
+                ctx.request_repaint_after(std::time::Duration::from_millis(100));
+            } else if !sessions.is_empty() {
+                ctx.request_repaint_after(std::time::Duration::from_secs(1));
+            } else {
+                ctx.request_repaint_after(std::time::Duration::from_secs(REPAINT_INTERVAL_SECS));
+            }
         }
 
         let time = ctx.input(|i| i.time);
 
-        // In compact mode, show one session at a time cycling every second
-        let display_sessions: Vec<&ClaudeSession> = if self.compact && !sessions.is_empty() {
-            let idx = (time as usize) % sessions.len();
-            vec![&sessions[idx]]
-        } else {
-            sessions.iter().collect()
-        };
+        if self.compact {
+            let summaries = state_summary(&sessions);
 
-        let n = display_sessions.len() as f32;
-        let window_height = if display_sessions.is_empty() {
-            WINDOW_EMPTY_HEIGHT
-        } else {
-            // ROW_HEIGHT per row + 4px item_spacing between rows + top/bottom padding
-            n * ROW_HEIGHT + (n - 1.0) * 4.0 + WINDOW_PADDING * 2.0
-        };
-
-        let window_width = if display_sessions.is_empty() {
-            MIN_WINDOW_WIDTH
-        } else {
-            let max_text = display_sessions
-                .iter()
-                .map(|s| measure_session_text_width(ctx, s))
-                .fold(0.0_f32, f32::max);
-            (max_text + ROW_HORIZONTAL_OVERHEAD).max(MIN_WINDOW_WIDTH)
-        };
-
-        ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(Vec2::new(
-            window_width,
-            window_height,
-        )));
-
-        if let Some(monitor_size) = ctx.input(|i| i.viewport().monitor_size) {
-            let effective_position = if self.alert_on_stale && should_alert_on_stale(&sessions) {
-                Position::MiddleCenter
+            let window_height = ROW_HEIGHT + WINDOW_PADDING * 2.0;
+            let window_width = if summaries.is_empty() {
+                MIN_WINDOW_WIDTH
             } else {
-                self.position
+                let n = summaries.len() as f32;
+                (n * COMPACT_GROUP_WIDTH + (n - 1.0) * COMPACT_GROUP_SPACING).max(MIN_WINDOW_WIDTH)
             };
-            let pos = effective_position.compute(monitor_size, Vec2::new(window_width, window_height));
-            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
-        }
 
-        egui::CentralPanel::default()
-            .frame(
-                egui::Frame::none()
-                    .fill(Color32::TRANSPARENT)
-                    .inner_margin(egui::Margin::symmetric(8.0, WINDOW_PADDING)),
-            )
-            .show(ctx, |ui| {
-                if display_sessions.is_empty() {
-                    ui.label(
-                        RichText::new("No Claude sessions found")
-                            .color(Color32::from_gray(120))
-                            .size(12.0),
-                    );
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(Vec2::new(
+                window_width,
+                window_height,
+            )));
+
+            if let Some(monitor_size) = ctx.input(|i| i.viewport().monitor_size) {
+                let effective_position = if self.alert_on_stale && should_alert_on_stale(&sessions) {
+                    Position::MiddleCenter
                 } else {
-                    for session in &display_sessions {
-                        render_session_row(ui, session, time);
+                    self.position
+                };
+                let pos = effective_position.compute(monitor_size, Vec2::new(window_width, window_height));
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
+            }
+
+            egui::CentralPanel::default()
+                .frame(
+                    egui::Frame::none()
+                        .fill(Color32::TRANSPARENT)
+                        .inner_margin(egui::Margin::symmetric(8.0, WINDOW_PADDING)),
+                )
+                .show(ctx, |ui| {
+                    if summaries.is_empty() {
+                        ui.label(
+                            RichText::new("No Claude sessions found")
+                                .color(Color32::from_gray(120))
+                                .size(12.0),
+                        );
+                    } else {
+                        render_compact_row(ui, &summaries, time);
                     }
-                }
-            });
+                });
+        } else {
+            let display_sessions: Vec<&ClaudeSession> = sessions.iter().collect();
+
+            let n = display_sessions.len() as f32;
+            let window_height = if display_sessions.is_empty() {
+                WINDOW_EMPTY_HEIGHT
+            } else {
+                // ROW_HEIGHT per row + 4px item_spacing between rows + top/bottom padding
+                n * ROW_HEIGHT + (n - 1.0) * 4.0 + WINDOW_PADDING * 2.0
+            };
+
+            let window_width = if display_sessions.is_empty() {
+                MIN_WINDOW_WIDTH
+            } else {
+                let max_text = display_sessions
+                    .iter()
+                    .map(|s| measure_session_text_width(ctx, s))
+                    .fold(0.0_f32, f32::max);
+                (max_text + ROW_HORIZONTAL_OVERHEAD).max(MIN_WINDOW_WIDTH)
+            };
+
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(Vec2::new(
+                window_width,
+                window_height,
+            )));
+
+            if let Some(monitor_size) = ctx.input(|i| i.viewport().monitor_size) {
+                let effective_position = if self.alert_on_stale && should_alert_on_stale(&sessions) {
+                    Position::MiddleCenter
+                } else {
+                    self.position
+                };
+                let pos = effective_position.compute(monitor_size, Vec2::new(window_width, window_height));
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
+            }
+
+            egui::CentralPanel::default()
+                .frame(
+                    egui::Frame::none()
+                        .fill(Color32::TRANSPARENT)
+                        .inner_margin(egui::Margin::symmetric(8.0, WINDOW_PADDING)),
+                )
+                .show(ctx, |ui| {
+                    if display_sessions.is_empty() {
+                        ui.label(
+                            RichText::new("No Claude sessions found")
+                                .color(Color32::from_gray(120))
+                                .size(12.0),
+                        );
+                    } else {
+                        for session in &display_sessions {
+                            render_session_row(ui, session, time);
+                        }
+                    }
+                });
+        }
     }
 }
 
@@ -310,6 +359,100 @@ fn render_session_row(ui: &mut Ui, session: &ClaudeSession, time: f64) {
     });
 }
 
+struct StateSummary {
+    state: ClaudeState,
+    count: usize,
+}
+
+/// Aggregate sessions by state, returning counts in fixed display order:
+/// Working → WaitingForApproval → Idle. States with 0 sessions are excluded.
+fn state_summary(sessions: &[ClaudeSession]) -> Vec<StateSummary> {
+    let display_order = [
+        ClaudeState::Working,
+        ClaudeState::WaitingForApproval,
+        ClaudeState::Idle,
+    ];
+    display_order
+        .into_iter()
+        .filter_map(|state| {
+            let count = sessions.iter().filter(|s| s.state == state).count();
+            if count > 0 {
+                Some(StateSummary { state, count })
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Width of a single compact summary group (robot + bubble + spacing).
+const COMPACT_GROUP_WIDTH: f32 = 70.0;
+/// Spacing between compact summary groups.
+const COMPACT_GROUP_SPACING: f32 = 4.0;
+
+fn render_compact_row(ui: &mut Ui, summaries: &[StateSummary], time: f64) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = COMPACT_GROUP_SPACING;
+        for summary in summaries {
+            let (state_color, _label) = match &summary.state {
+                ClaudeState::Working => (Color32::from_rgb(80, 200, 80), "Running"),
+                ClaudeState::WaitingForApproval => (Color32::from_rgb(220, 180, 0), "Approval"),
+                ClaudeState::Idle => (Color32::from_gray(160), "Idle"),
+            };
+
+            let stroke_width = calc_stroke_width(&summary.state, time);
+
+            // Mini robot art (same as render_session_row)
+            ui.allocate_ui(egui::Vec2::new(40.0, ROW_HEIGHT), |ui| {
+                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    let o = Color32::from_rgb(210, 110, 30);
+                    let lines: [(&str, Color32); 4] = [
+                        ("▟█▙", state_color),
+                        ("▐▛███▜▌", o),
+                        ("▝▜█████▛▘", o),
+                        ("▘▘ ▝▝", o),
+                    ];
+                    for (text, color) in lines {
+                        ui.label(RichText::new(text).size(5.0).color(color).monospace());
+                    }
+                });
+            });
+
+            // Speech bubble with count
+            ui.add_space(2.0);
+            let bubble_fill = Color32::from_rgba_unmultiplied(30, 30, 45, 220);
+            let inner = egui::Frame::none()
+                .fill(bubble_fill)
+                .stroke(egui::Stroke::new(stroke_width, state_color))
+                .rounding(egui::Rounding::same(5.0))
+                .inner_margin(egui::Margin::symmetric(6.0, 2.0))
+                .show(ui, |ui: &mut Ui| {
+                    ui.label(
+                        RichText::new(format!("{}", summary.count))
+                            .color(state_color)
+                            .size(11.0),
+                    );
+                });
+
+            // Draw tail triangle pointing left toward the robot
+            let rect = inner.response.rect;
+            let mid_y = rect.center().y;
+            let tail_tip = egui::pos2(rect.left() - 4.0, mid_y);
+            let tail_top = egui::pos2(rect.left(), mid_y - 4.0);
+            let tail_bot = egui::pos2(rect.left(), mid_y + 4.0);
+            let painter = ui.painter();
+            painter.add(egui::Shape::convex_polygon(
+                vec![tail_tip, tail_top, tail_bot],
+                bubble_fill,
+                egui::Stroke::NONE,
+            ));
+            painter.line_segment([tail_tip, tail_top], egui::Stroke::new(stroke_width, state_color));
+            painter.line_segment([tail_tip, tail_bot], egui::Stroke::new(stroke_width, state_color));
+        }
+    });
+}
+
 fn should_alert_on_stale(sessions: &[ClaudeSession]) -> bool {
     sessions.iter().any(|s| {
         let elapsed = s.state_changed_at.elapsed().as_secs();
@@ -403,6 +546,60 @@ mod tests {
             state,
             state_changed_at: Instant::now() - elapsed,
         }
+    }
+
+    #[test]
+    fn state_summary_empty_sessions() {
+        let result = state_summary(&[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn state_summary_all_working() {
+        let sessions = vec![
+            make_session(ClaudeState::Working, Duration::from_secs(1)),
+            make_session(ClaudeState::Working, Duration::from_secs(2)),
+            make_session(ClaudeState::Working, Duration::from_secs(3)),
+        ];
+        let result = state_summary(&sessions);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].state, ClaudeState::Working);
+        assert_eq!(result[0].count, 3);
+    }
+
+    #[test]
+    fn state_summary_mixed_excludes_zero() {
+        let sessions = vec![
+            make_session(ClaudeState::Working, Duration::from_secs(1)),
+            make_session(ClaudeState::Idle, Duration::from_secs(2)),
+            make_session(ClaudeState::Idle, Duration::from_secs(3)),
+        ];
+        let result = state_summary(&sessions);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].state, ClaudeState::Working);
+        assert_eq!(result[0].count, 1);
+        assert_eq!(result[1].state, ClaudeState::Idle);
+        assert_eq!(result[1].count, 2);
+    }
+
+    #[test]
+    fn state_summary_all_three_states() {
+        let sessions = vec![
+            make_session(ClaudeState::Working, Duration::from_secs(1)),
+            make_session(ClaudeState::Working, Duration::from_secs(2)),
+            make_session(ClaudeState::WaitingForApproval, Duration::from_secs(3)),
+            make_session(ClaudeState::Idle, Duration::from_secs(4)),
+            make_session(ClaudeState::Idle, Duration::from_secs(5)),
+            make_session(ClaudeState::Idle, Duration::from_secs(6)),
+        ];
+        let result = state_summary(&sessions);
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].state, ClaudeState::Working);
+        assert_eq!(result[0].count, 2);
+        assert_eq!(result[1].state, ClaudeState::WaitingForApproval);
+        assert_eq!(result[1].count, 1);
+        assert_eq!(result[2].state, ClaudeState::Idle);
+        assert_eq!(result[2].count, 3);
     }
 
     #[test]

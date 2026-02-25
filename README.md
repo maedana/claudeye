@@ -40,9 +40,6 @@ claudeye picker
 # Run with default settings (show all sessions at top center)
 claudeye
 
-# Run in compact mode (cycle through one session at a time, one per second)
-claudeye --compact
-
 # Position the overlay at a specific screen location
 claudeye --position bottom-right
 claudeye -p top-left
@@ -50,10 +47,21 @@ claudeye -p top-left
 
 | Option | Description |
 |--------|-------------|
-| `--compact` | Show one session at a time, cycling every second |
+| `--compact` | Show state summary with session counts |
 | `--position`, `-p` | Window position on screen (default: `top-center`). Values: `top-left`, `top-center`, `top-right`, `middle-left`, `middle-center`, `middle-right`, `bottom-left`, `bottom-center`, `bottom-right` |
 
 ![Overlay mode][1]
+
+#### Compact mode
+
+```sh
+# Run in compact mode (state summary with session counts)
+claudeye --compact
+```
+
+In compact mode, sessions are grouped by state and displayed as a single row of robot + bubble pairs. Each bubble shows the number of sessions in that state. States with no sessions are hidden.
+
+![Compact mode][3]
 
 ### Picker mode
 
@@ -109,3 +117,4 @@ cargo run     # Run in development mode
 
 [1]: https://raw.githubusercontent.com/maedana/claudeye/main/demo/demo.png
 [2]: https://raw.githubusercontent.com/maedana/claudeye/main/demo/demo2.gif
+[3]: https://raw.githubusercontent.com/maedana/claudeye/main/demo/demo3.png
