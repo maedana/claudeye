@@ -4,9 +4,9 @@
 
 ### Added
 
-- `--center-on-stale` option to move overlay to screen center when a session needs attention
-  - Approval state triggers center immediately
-  - Idle state triggers center after 10 seconds
+- `--alert-on-stale` option to move overlay to screen center when a session needs attention
+  - Triggers for Approval/Idle sessions between 5–15 seconds of staleness
+  - After 15 seconds the overlay returns to its configured position
 
 ## [0.3.0] - 2026-02-24
 
