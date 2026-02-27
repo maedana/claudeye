@@ -111,6 +111,174 @@ fn resolve_claude_versions() -> Option<HashSet<String>> {
     Some(entries)
 }
 
+/// Check whether any Claude pane is currently focused AND the tmux terminal window
+/// has OS-level focus.
+///
+/// Requires `set-option -g focus-events on` in tmux for the terminal focus detection
+/// to work. When focus-events is off (or the terminal doesn't support it), `client_flags`
+/// won't contain "focused" and this function returns `false` (no suppression — safe default).
+pub fn any_claude_pane_focused() -> bool {
+    let session = match focused_client_session() {
+        Some(s) => s,
+        None => return false,
+    };
+
+    let output = Command::new("tmux")
+        .args([
+            "list-panes",
+            "-a",
+            "-F",
+            "#{session_name} #{pane_active} #{window_active} #{pane_current_command}",
+        ])
+        .output();
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            stdout
+                .lines()
+                .any(|line| is_focused_claude_line_in_session(line, &session))
+        }
+        Err(_) => false,
+    }
+}
+
+/// Return the session name of the focused tmux client, if any.
+fn focused_client_session() -> Option<String> {
+    let output = Command::new("tmux")
+        .args(["list-clients", "-F", "#{client_flags} #{client_session}"])
+        .output()
+        .ok()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout.lines().find_map(parse_focused_session)
+}
+
+/// Parse a line of `tmux list-clients -F "#{client_flags} #{client_session}"`
+/// and return the session name if the client has the "focused" flag.
+pub fn parse_focused_session(line: &str) -> Option<String> {
+    let (flags, session) = line.split_once(' ')?;
+    if flags.split(',').any(|flag| flag.trim() == "focused") {
+        Some(session.to_string())
+    } else {
+        None
+    }
+}
+
+/// Parse a single line of `tmux list-panes -a -F "#{session_name} #{pane_active} #{window_active} #{pane_current_command}"`
+/// and return true if the pane belongs to the given session, is active, and running a Claude process.
+pub fn is_focused_claude_line_in_session(line: &str, session: &str) -> bool {
+    let parts: Vec<&str> = line.splitn(4, ' ').collect();
+    if parts.len() < 4 {
+        return false;
+    }
+    parts[0] == session
+        && parts[1] == "1"
+        && parts[2] == "1"
+        && is_claude_command(parts[3].trim())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // --- parse_focused_session ---
+
+    #[test]
+    fn parse_focused_session_with_focused_client() {
+        assert_eq!(
+            parse_focused_session("attached,focused,UTF-8 my-session"),
+            Some("my-session".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_focused_session_focused_only() {
+        assert_eq!(
+            parse_focused_session("focused dev"),
+            Some("dev".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_focused_session_not_focused() {
+        assert_eq!(
+            parse_focused_session("attached,UTF-8 my-session"),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_focused_session_empty_line() {
+        assert_eq!(parse_focused_session(""), None);
+    }
+
+    #[test]
+    fn parse_focused_session_no_session_field() {
+        assert_eq!(parse_focused_session("focused"), None);
+    }
+
+    #[test]
+    fn parse_focused_session_session_with_special_chars() {
+        assert_eq!(
+            parse_focused_session("attached,focused work-2"),
+            Some("work-2".to_string())
+        );
+    }
+
+    // --- is_focused_claude_line with session ---
+
+    #[test]
+    fn focused_claude_pane_matching_session() {
+        assert!(is_focused_claude_line_in_session(
+            "my-session 1 1 claude",
+            "my-session"
+        ));
+    }
+
+    #[test]
+    fn focused_claude_pane_different_session() {
+        assert!(!is_focused_claude_line_in_session(
+            "other-session 1 1 claude",
+            "my-session"
+        ));
+    }
+
+    #[test]
+    fn inactive_pane_matching_session() {
+        assert!(!is_focused_claude_line_in_session(
+            "my-session 0 1 claude",
+            "my-session"
+        ));
+    }
+
+    #[test]
+    fn inactive_window_matching_session() {
+        assert!(!is_focused_claude_line_in_session(
+            "my-session 1 0 claude",
+            "my-session"
+        ));
+    }
+
+    #[test]
+    fn non_claude_matching_session() {
+        assert!(!is_focused_claude_line_in_session(
+            "my-session 1 1 vim",
+            "my-session"
+        ));
+    }
+
+    #[test]
+    fn malformed_session_line() {
+        assert!(!is_focused_claude_line_in_session("my-session 1 1", "my-session"));
+    }
+
+    #[test]
+    fn empty_session_line() {
+        assert!(!is_focused_claude_line_in_session("", "my-session"));
+    }
+}
+
 pub fn capture_pane(pane_id: &str) -> String {
     let output = Command::new("tmux")
         .args(["capture-pane", "-p", "-t", pane_id])

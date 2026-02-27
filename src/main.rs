@@ -5,7 +5,7 @@ mod tmux;
 
 use clap::{Parser, Subcommand};
 use eframe::egui::{self, Color32, RichText, Ui, Vec2};
-use monitor::{ClaudeSession, start_polling};
+use monitor::{ClaudeSession, MonitorState, start_polling};
 use claude_state::ClaudeState;
 use std::sync::{Arc, Mutex};
 
@@ -93,8 +93,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn run_gui(compact: bool, position: Position, alert_on_stale: bool) -> eframe::Result<()> {
-    let sessions: Arc<Mutex<Vec<ClaudeSession>>> = Arc::new(Mutex::new(vec![]));
-    start_polling(Arc::clone(&sessions));
+    let state: Arc<Mutex<MonitorState>> = Arc::new(Mutex::new(MonitorState::default()));
+    start_polling(Arc::clone(&state));
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -109,12 +109,12 @@ fn run_gui(compact: bool, position: Position, alert_on_stale: bool) -> eframe::R
     eframe::run_native(
         "claudeye",
         options,
-        Box::new(|_cc| Ok(Box::new(CcMonitorApp { sessions, compact, position, alert_on_stale }))),
+        Box::new(|_cc| Ok(Box::new(CcMonitorApp { state, compact, position, alert_on_stale }))),
     )
 }
 
 struct CcMonitorApp {
-    sessions: Arc<Mutex<Vec<ClaudeSession>>>,
+    state: Arc<Mutex<MonitorState>>,
     compact: bool,
     position: Position,
     alert_on_stale: bool,
@@ -133,12 +133,12 @@ impl eframe::App for CcMonitorApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
         ctx.send_viewport_cmd(egui::ViewportCommand::MousePassthrough(true));
 
-        let sessions = match self.sessions.lock() {
-            Ok(guard) => guard.clone(),
+        let (sessions, quiet) = match self.state.lock() {
+            Ok(guard) => (guard.sessions.clone(), guard.any_claude_focused),
             Err(_) => return, // poisoned mutex: polling thread panicked
         };
 
-        let needs_fast_repaint = sessions.iter().any(|s| match s.state {
+        let needs_fast_repaint = !quiet && sessions.iter().any(|s| match s.state {
             ClaudeState::Working => !self.compact,
             ClaudeState::WaitingForApproval => true,
             ClaudeState::Idle => {
@@ -172,7 +172,7 @@ impl eframe::App for CcMonitorApp {
             )));
 
             if let Some(monitor_size) = ctx.input(|i| i.viewport().monitor_size) {
-                let effective_position = if self.alert_on_stale && should_alert_on_stale(&sessions) {
+                let effective_position = if self.alert_on_stale && !quiet && should_alert_on_stale(&sessions) {
                     Position::MiddleCenter
                 } else {
                     self.position
@@ -195,7 +195,7 @@ impl eframe::App for CcMonitorApp {
                                 .size(12.0),
                         );
                     } else {
-                        let stale_idle = sessions.iter().any(|s| {
+                        let stale_idle = !quiet && sessions.iter().any(|s| {
                             matches!(s.state, ClaudeState::Idle)
                                 && (STALE_MIN_SECS..=STALE_MAX_SECS)
                                     .contains(&s.state_changed_at.elapsed().as_secs())
@@ -230,7 +230,7 @@ impl eframe::App for CcMonitorApp {
             )));
 
             if let Some(monitor_size) = ctx.input(|i| i.viewport().monitor_size) {
-                let effective_position = if self.alert_on_stale && should_alert_on_stale(&sessions) {
+                let effective_position = if self.alert_on_stale && !quiet && should_alert_on_stale(&sessions) {
                     Position::MiddleCenter
                 } else {
                     self.position
@@ -254,7 +254,7 @@ impl eframe::App for CcMonitorApp {
                         );
                     } else {
                         for session in &display_sessions {
-                            render_session_row(ui, session, time);
+                            render_session_row(ui, session, time, quiet);
                         }
                     }
                 });
@@ -279,6 +279,19 @@ fn measure_session_text_width(ctx: &egui::Context, session: &ClaudeSession) -> f
     })
 }
 
+/// Determine whether a session should pulse based on its state, elapsed time, and quiet mode.
+///
+/// When `quiet` is true (Claude pane is focused and tmux client is active),
+/// pulse is always suppressed.
+fn should_pulse(state: &ClaudeState, elapsed_secs: u64, quiet: bool) -> bool {
+    if quiet {
+        return false;
+    }
+    matches!(state, ClaudeState::WaitingForApproval)
+        || (matches!(state, ClaudeState::Idle)
+            && (STALE_MIN_SECS..=STALE_MAX_SECS).contains(&elapsed_secs))
+}
+
 fn calc_stroke_width(time: f64, pulse: bool) -> f32 {
     if pulse {
         let p = ((time * 16.0).sin() as f32 + 1.0) / 2.0;
@@ -288,7 +301,7 @@ fn calc_stroke_width(time: f64, pulse: bool) -> f32 {
     }
 }
 
-fn render_session_row(ui: &mut Ui, session: &ClaudeSession, time: f64) {
+fn render_session_row(ui: &mut Ui, session: &ClaudeSession, time: f64, quiet: bool) {
     let (state_color, label) = match &session.state {
         ClaudeState::Working => (Color32::from_rgb(80, 200, 80), "Running"),
         ClaudeState::WaitingForApproval => (Color32::from_rgb(220, 180, 0), "Approval"),
@@ -296,9 +309,7 @@ fn render_session_row(ui: &mut Ui, session: &ClaudeSession, time: f64) {
     };
 
     let elapsed = session.state_changed_at.elapsed().as_secs();
-    let pulse = matches!(session.state, ClaudeState::WaitingForApproval)
-        || (matches!(session.state, ClaudeState::Idle)
-            && (STALE_MIN_SECS..=STALE_MAX_SECS).contains(&elapsed));
+    let pulse = should_pulse(&session.state, elapsed, quiet);
     let stroke_width = calc_stroke_width(time, pulse);
 
     ui.horizontal(|ui| {
@@ -686,4 +697,45 @@ mod tests {
         assert!(!should_alert_on_stale(&sessions));
     }
 
+    // --- should_pulse ---
+
+    #[test]
+    fn pulse_approval_not_quiet() {
+        assert!(should_pulse(&ClaudeState::WaitingForApproval, 0, false));
+    }
+
+    #[test]
+    fn pulse_approval_quiet_suppressed() {
+        assert!(!should_pulse(&ClaudeState::WaitingForApproval, 0, true));
+    }
+
+    #[test]
+    fn pulse_idle_stale_not_quiet() {
+        assert!(should_pulse(&ClaudeState::Idle, 10, false));
+    }
+
+    #[test]
+    fn pulse_idle_stale_quiet_suppressed() {
+        assert!(!should_pulse(&ClaudeState::Idle, 10, true));
+    }
+
+    #[test]
+    fn pulse_idle_fresh_not_quiet() {
+        assert!(!should_pulse(&ClaudeState::Idle, 3, false));
+    }
+
+    #[test]
+    fn pulse_idle_expired_not_quiet() {
+        assert!(!should_pulse(&ClaudeState::Idle, 20, false));
+    }
+
+    #[test]
+    fn pulse_working_not_quiet() {
+        assert!(!should_pulse(&ClaudeState::Working, 10, false));
+    }
+
+    #[test]
+    fn pulse_working_quiet() {
+        assert!(!should_pulse(&ClaudeState::Working, 10, true));
+    }
 }
