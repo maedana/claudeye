@@ -84,6 +84,18 @@ Sessions beyond the 9th are accessible via `j`/`k` navigation.
 
 ![Picker mode][2]
 
+## Auto-quiet mode
+
+When the focused tmux pane is running Claude, claudeye automatically suppresses pulse animations, stale-idle highlights, and `--alert-on-stale` centering so the overlay stays unobtrusive while you're actively working with Claude.
+
+This feature relies on tmux focus events. Enable them in your `~/.tmux.conf`:
+
+```
+set-option -g focus-events on
+```
+
+When `focus-events` is off (or the terminal doesn't support it), quiet mode is simply disabled and the overlay behaves as before.
+
 ## How it works
 
 ### Overlay mode

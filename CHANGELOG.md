@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- Auto-quiet mode: suppress pulse animations and stale alerts when the focused tmux pane is running Claude
+  - Detects OS-level terminal focus via tmux `focus-events` and active pane command
+  - Requires `set-option -g focus-events on` in tmux config for full support
+
 ## [0.4.0] - 2026-02-25
 
 ### Added
