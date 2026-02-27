@@ -25,10 +25,7 @@ pub fn list_claude_panes() -> Vec<PaneInfo> {
     match output {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout);
-            stdout
-                .lines()
-                .filter_map(parse_pane_line)
-                .collect()
+            stdout.lines().filter_map(parse_pane_line).collect()
         }
         Err(e) => {
             eprintln!("[claudeye] tmux list-panes failed: {e}");
@@ -64,7 +61,6 @@ pub fn parse_pane_line(line: &str) -> Option<PaneInfo> {
         project_name,
     })
 }
-
 
 pub fn switch_to_pane(pane_id: &str) {
     let result = Command::new("tmux")
@@ -172,10 +168,7 @@ pub fn is_focused_claude_line_in_session(line: &str, session: &str) -> bool {
     if parts.len() < 4 {
         return false;
     }
-    parts[0] == session
-        && parts[1] == "1"
-        && parts[2] == "1"
-        && is_claude_command(parts[3].trim())
+    parts[0] == session && parts[1] == "1" && parts[2] == "1" && is_claude_command(parts[3].trim())
 }
 
 #[cfg(test)]
@@ -202,10 +195,7 @@ mod tests {
 
     #[test]
     fn parse_focused_session_not_focused() {
-        assert_eq!(
-            parse_focused_session("attached,UTF-8 my-session"),
-            None
-        );
+        assert_eq!(parse_focused_session("attached,UTF-8 my-session"), None);
     }
 
     #[test]
@@ -270,7 +260,10 @@ mod tests {
 
     #[test]
     fn malformed_session_line() {
-        assert!(!is_focused_claude_line_in_session("my-session 1 1", "my-session"));
+        assert!(!is_focused_claude_line_in_session(
+            "my-session 1 1",
+            "my-session"
+        ));
     }
 
     #[test]

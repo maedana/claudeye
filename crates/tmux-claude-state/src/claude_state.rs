@@ -103,16 +103,12 @@ fn running_pattern_time_first() -> &'static Regex {
 
 fn running_fallback_pattern() -> &'static Regex {
     static P: OnceLock<Regex> = OnceLock::new();
-    P.get_or_init(|| {
-        Regex::new(r"(?m)^[✢✽✶✻·]\s+.+?…?\s*\((esc|ctrl\+c) to interrupt").unwrap()
-    })
+    P.get_or_init(|| Regex::new(r"(?m)^[✢✽✶✻·]\s+.+?…?\s*\((esc|ctrl\+c) to interrupt").unwrap())
 }
 
 fn esc_to_interrupt_end_pattern() -> &'static Regex {
     static P: OnceLock<Regex> = OnceLock::new();
-    P.get_or_init(|| {
-        Regex::new(r"(?m)·\s*esc to interrupt(\s|·|$)").unwrap()
-    })
+    P.get_or_init(|| Regex::new(r"(?m)·\s*esc to interrupt(\s|·|$)").unwrap())
 }
 
 fn running_generic_pattern() -> &'static Regex {
@@ -125,30 +121,22 @@ fn running_generic_pattern() -> &'static Regex {
 
 fn selection_menu_pattern() -> &'static Regex {
     static P: OnceLock<Regex> = OnceLock::new();
-    P.get_or_init(|| {
-        Regex::new(r"❯\s+\d+\.").unwrap()
-    })
+    P.get_or_init(|| Regex::new(r"❯\s+\d+\.").unwrap())
 }
 
 fn file_changes_pattern() -> &'static Regex {
     static P: OnceLock<Regex> = OnceLock::new();
-    P.get_or_init(|| {
-        Regex::new(r"^\s*\d+\s+files?\s+[+\-]").unwrap()
-    })
+    P.get_or_init(|| Regex::new(r"^\s*\d+\s+files?\s+[+\-]").unwrap())
 }
 
 fn idle_pattern() -> &'static Regex {
     static P: OnceLock<Regex> = OnceLock::new();
-    P.get_or_init(|| {
-        Regex::new(r"(?m)^\s*❯").unwrap()
-    })
+    P.get_or_init(|| Regex::new(r"(?m)^\s*❯").unwrap())
 }
 
 fn interview_pattern() -> &'static Regex {
     static P: OnceLock<Regex> = OnceLock::new();
-    P.get_or_init(|| {
-        Regex::new(r"Enter to select.*↑/↓ to navigate.*Esc to cancel").unwrap()
-    })
+    P.get_or_init(|| Regex::new(r"Enter to select.*↑/↓ to navigate.*Esc to cancel").unwrap())
 }
 
 fn last_non_empty_lines<'a>(lines: &[&'a str], n: usize) -> Vec<&'a str> {

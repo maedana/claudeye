@@ -3,19 +3,19 @@ use std::io::{self, Stdout};
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Terminal,
     backend::CrosstermBackend,
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState},
-    Terminal,
 };
 
-use crate::claude_state::{detect_state, ClaudeState};
-use crate::monitor::ClaudeSession;
-use crate::tmux;
+use tmux_claude_state::claude_state::{ClaudeState, detect_state};
+use tmux_claude_state::monitor::ClaudeSession;
+use tmux_claude_state::tmux;
 
 pub struct PickerState {
     pub sessions: Vec<ClaudeSession>,
@@ -24,7 +24,10 @@ pub struct PickerState {
 
 impl PickerState {
     pub fn new(sessions: Vec<ClaudeSession>) -> Self {
-        Self { sessions, selected: 0 }
+        Self {
+            sessions,
+            selected: 0,
+        }
     }
 
     pub fn move_up(&mut self) {
@@ -55,7 +58,11 @@ pub fn run_picker() -> io::Result<()> {
         .map(|pane| {
             let content = tmux::capture_pane(&pane.id);
             let state = detect_state(&content);
-            ClaudeSession { pane, state, state_changed_at: std::time::Instant::now() }
+            ClaudeSession {
+                pane,
+                state,
+                state_changed_at: std::time::Instant::now(),
+            }
         })
         .collect();
 
@@ -160,7 +167,7 @@ fn state_display(state: &ClaudeState) -> (&'static str, Color, &'static str) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tmux::PaneInfo;
+    use tmux_claude_state::tmux::PaneInfo;
 
     fn make_session(id: &str) -> ClaudeSession {
         ClaudeSession {

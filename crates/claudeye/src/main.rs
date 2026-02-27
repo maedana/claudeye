@@ -1,13 +1,10 @@
-mod claude_state;
-mod monitor;
 mod picker;
-mod tmux;
 
 use clap::{Parser, Subcommand};
 use eframe::egui::{self, Color32, RichText, Ui, Vec2};
-use monitor::{ClaudeSession, MonitorState, start_polling};
-use claude_state::ClaudeState;
 use std::sync::{Arc, Mutex};
+use tmux_claude_state::claude_state::ClaudeState;
+use tmux_claude_state::monitor::{ClaudeSession, MonitorState, start_polling};
 
 #[derive(Parser)]
 #[command(about = "Claude session monitor overlay", version)]
@@ -109,7 +106,14 @@ fn run_gui(compact: bool, position: Position, alert_on_stale: bool) -> eframe::R
     eframe::run_native(
         "claudeye",
         options,
-        Box::new(|_cc| Ok(Box::new(CcMonitorApp { state, compact, position, alert_on_stale }))),
+        Box::new(|_cc| {
+            Ok(Box::new(CcMonitorApp {
+                state,
+                compact,
+                position,
+                alert_on_stale,
+            }))
+        }),
     )
 }
 
@@ -130,7 +134,9 @@ impl eframe::App for CcMonitorApp {
         visuals.panel_fill = Color32::TRANSPARENT;
         ctx.set_visuals(visuals);
 
-        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
+        ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
+            egui::WindowLevel::AlwaysOnTop,
+        ));
         ctx.send_viewport_cmd(egui::ViewportCommand::MousePassthrough(true));
 
         let (sessions, quiet) = match self.state.lock() {
@@ -138,13 +144,13 @@ impl eframe::App for CcMonitorApp {
             Err(_) => return, // poisoned mutex: polling thread panicked
         };
 
-        let needs_fast_repaint = !quiet && sessions.iter().any(|s| match s.state {
-            ClaudeState::Working => !self.compact,
-            ClaudeState::WaitingForApproval => true,
-            ClaudeState::Idle => {
-                (STALE_MIN_SECS..=STALE_MAX_SECS).contains(&s.state_changed_at.elapsed().as_secs())
-            }
-        });
+        let needs_fast_repaint = !quiet
+            && sessions.iter().any(|s| match s.state {
+                ClaudeState::Working => !self.compact,
+                ClaudeState::WaitingForApproval => true,
+                ClaudeState::Idle => (STALE_MIN_SECS..=STALE_MAX_SECS)
+                    .contains(&s.state_changed_at.elapsed().as_secs()),
+            });
         if needs_fast_repaint {
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
         } else if !sessions.is_empty() {
@@ -172,12 +178,14 @@ impl eframe::App for CcMonitorApp {
             )));
 
             if let Some(monitor_size) = ctx.input(|i| i.viewport().monitor_size) {
-                let effective_position = if self.alert_on_stale && !quiet && should_alert_on_stale(&sessions) {
-                    Position::MiddleCenter
-                } else {
-                    self.position
-                };
-                let pos = effective_position.compute(monitor_size, Vec2::new(window_width, window_height));
+                let effective_position =
+                    if self.alert_on_stale && !quiet && should_alert_on_stale(&sessions) {
+                        Position::MiddleCenter
+                    } else {
+                        self.position
+                    };
+                let pos = effective_position
+                    .compute(monitor_size, Vec2::new(window_width, window_height));
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
             }
 
@@ -195,11 +203,12 @@ impl eframe::App for CcMonitorApp {
                                 .size(12.0),
                         );
                     } else {
-                        let stale_idle = !quiet && sessions.iter().any(|s| {
-                            matches!(s.state, ClaudeState::Idle)
-                                && (STALE_MIN_SECS..=STALE_MAX_SECS)
-                                    .contains(&s.state_changed_at.elapsed().as_secs())
-                        });
+                        let stale_idle = !quiet
+                            && sessions.iter().any(|s| {
+                                matches!(s.state, ClaudeState::Idle)
+                                    && (STALE_MIN_SECS..=STALE_MAX_SECS)
+                                        .contains(&s.state_changed_at.elapsed().as_secs())
+                            });
                         render_compact_row(ui, &summaries, time, stale_idle);
                     }
                 });
@@ -230,12 +239,14 @@ impl eframe::App for CcMonitorApp {
             )));
 
             if let Some(monitor_size) = ctx.input(|i| i.viewport().monitor_size) {
-                let effective_position = if self.alert_on_stale && !quiet && should_alert_on_stale(&sessions) {
-                    Position::MiddleCenter
-                } else {
-                    self.position
-                };
-                let pos = effective_position.compute(monitor_size, Vec2::new(window_width, window_height));
+                let effective_position =
+                    if self.alert_on_stale && !quiet && should_alert_on_stale(&sessions) {
+                        Position::MiddleCenter
+                    } else {
+                        self.position
+                    };
+                let pos = effective_position
+                    .compute(monitor_size, Vec2::new(window_width, window_height));
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
             }
 
@@ -318,7 +329,7 @@ fn render_session_row(ui: &mut Ui, session: &ClaudeSession, time: f64, quiet: bo
         ui.allocate_ui(egui::Vec2::new(40.0, ROW_HEIGHT), |ui| {
             ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
-                let o = Color32::from_rgb(210, 110, 30);  // orange
+                let o = Color32::from_rgb(210, 110, 30); // orange
                 let lines: [(&str, Color32); 4] = [
                     ("▟█▙", state_color),
                     ("▐▛███▜▌", o),
@@ -367,8 +378,14 @@ fn render_session_row(ui: &mut Ui, session: &ClaudeSession, time: f64, quiet: bo
             bubble_fill,
             egui::Stroke::NONE,
         ));
-        painter.line_segment([tail_tip, tail_top], egui::Stroke::new(stroke_width, state_color));
-        painter.line_segment([tail_tip, tail_bot], egui::Stroke::new(stroke_width, state_color));
+        painter.line_segment(
+            [tail_tip, tail_top],
+            egui::Stroke::new(stroke_width, state_color),
+        );
+        painter.line_segment(
+            [tail_tip, tail_bot],
+            egui::Stroke::new(stroke_width, state_color),
+        );
     });
 }
 
@@ -378,7 +395,7 @@ struct StateSummary {
 }
 
 /// Aggregate sessions by state, returning counts in fixed display order:
-/// Working → WaitingForApproval → Idle. States with 0 sessions are excluded.
+/// Working -> WaitingForApproval -> Idle. States with 0 sessions are excluded.
 fn state_summary(sessions: &[ClaudeSession]) -> Vec<StateSummary> {
     let display_order = [
         ClaudeState::Working,
@@ -462,8 +479,14 @@ fn render_compact_row(ui: &mut Ui, summaries: &[StateSummary], time: f64, stale_
                 bubble_fill,
                 egui::Stroke::NONE,
             ));
-            painter.line_segment([tail_tip, tail_top], egui::Stroke::new(stroke_width, state_color));
-            painter.line_segment([tail_tip, tail_bot], egui::Stroke::new(stroke_width, state_color));
+            painter.line_segment(
+                [tail_tip, tail_top],
+                egui::Stroke::new(stroke_width, state_color),
+            );
+            painter.line_segment(
+                [tail_tip, tail_bot],
+                egui::Stroke::new(stroke_width, state_color),
+            );
         }
     });
 }
@@ -484,7 +507,7 @@ fn should_alert_on_stale(sessions: &[ClaudeSession]) -> bool {
 mod tests {
     use super::*;
     use std::time::{Duration, Instant};
-    use crate::tmux::PaneInfo;
+    use tmux_claude_state::tmux::PaneInfo;
 
     #[test]
     fn stroke_width_no_pulse_is_always_one() {
@@ -536,7 +559,10 @@ mod tests {
     #[test]
     fn min_window_width_is_positive_and_reasonable() {
         assert!(MIN_WINDOW_WIDTH > 0.0);
-        assert!(MIN_WINDOW_WIDTH <= 300.0, "MIN_WINDOW_WIDTH should be modest");
+        assert!(
+            MIN_WINDOW_WIDTH <= 300.0,
+            "MIN_WINDOW_WIDTH should be modest"
+        );
     }
 
     #[test]

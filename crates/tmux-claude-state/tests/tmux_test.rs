@@ -1,4 +1,4 @@
-use claudeye::tmux::parse_pane_line;
+use tmux_claude_state::tmux::parse_pane_line;
 
 #[test]
 fn parse_valid_pane_line_claude() {
@@ -50,17 +50,21 @@ fn project_name_is_basename_of_cwd() {
 /// binary. It is skipped on CI or Linux where the symlink does not exist.
 #[test]
 fn parse_pane_line_any_installed_claude_version_detected() {
-    let output = std::process::Command::new("which")
-        .arg("claude")
-        .output();
+    let output = std::process::Command::new("which").arg("claude").output();
     let Ok(out) = output else { return };
     if !out.status.success() {
         return;
     }
     let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    let Ok(target) = std::fs::read_link(&path) else { return };
-    let Some(versions_dir) = target.parent() else { return };
-    let Ok(rd) = std::fs::read_dir(versions_dir) else { return };
+    let Ok(target) = std::fs::read_link(&path) else {
+        return;
+    };
+    let Some(versions_dir) = target.parent() else {
+        return;
+    };
+    let Ok(rd) = std::fs::read_dir(versions_dir) else {
+        return;
+    };
 
     let entries: Vec<_> = rd
         .filter_map(|e| e.ok())
@@ -81,4 +85,3 @@ fn parse_pane_line_non_existent_version_not_detected() {
     let line = "main:1.1 74988 /Users/user/myapp 99.99.99";
     assert!(parse_pane_line(line).is_none());
 }
-

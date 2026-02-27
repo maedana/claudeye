@@ -747,7 +747,7 @@ dependencies = [
  "eframe",
  "egui",
  "ratatui",
- "regex",
+ "tmux-claude-state",
 ]
 
 [[package]]
@@ -3255,6 +3255,13 @@ checksum = "42d3e9c45c09de15d06dd8acf5f4e0e399e85927b7f00711024eb7ae10fa4869"
 dependencies = [
  "displaydoc",
  "zerovec",
+]
+
+[[package]]
+name = "tmux-claude-state"
+version = "0.1.0"
+dependencies = [
+ "regex",
 ]
 
 [[package]]

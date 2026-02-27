@@ -1,4 +1,4 @@
-use claudeye::claude_state::{detect_state, ClaudeState};
+use tmux_claude_state::claude_state::{ClaudeState, detect_state};
 
 // Ported from tcmux status_claude_test.go
 
