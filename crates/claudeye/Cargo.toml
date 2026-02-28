@@ -16,4 +16,4 @@ crossterm = "0.28"
 eframe = "0.30"
 egui = "0.30"
 ratatui = "0.29"
-tmux-claude-state = { path = "../tmux-claude-state", version = "0.1.0" }
+tmux-claude-state = { path = "../tmux-claude-state", version = "0.1.1" }
