@@ -270,12 +270,35 @@ mod tests {
     fn empty_session_line() {
         assert!(!is_focused_claude_line_in_session("", "my-session"));
     }
+
+    // --- capture_pane_args ---
+
+    #[test]
+    fn capture_pane_args_plain_text() {
+        let args = capture_pane_args("%1", false);
+        assert_eq!(args, vec!["capture-pane", "-p", "-t", "%1"]);
+    }
+
+    #[test]
+    fn capture_pane_args_with_ansi() {
+        let args = capture_pane_args("%1", true);
+        assert_eq!(args, vec!["capture-pane", "-p", "-e", "-t", "%1"]);
+    }
 }
 
-pub fn capture_pane(pane_id: &str) -> String {
-    let output = Command::new("tmux")
-        .args(["capture-pane", "-p", "-t", pane_id])
-        .output();
+fn capture_pane_args(pane_id: &str, ansi: bool) -> Vec<&str> {
+    let mut args = vec!["capture-pane", "-p"];
+    if ansi {
+        args.push("-e");
+    }
+    args.push("-t");
+    args.push(pane_id);
+    args
+}
+
+fn run_capture_pane(pane_id: &str, ansi: bool) -> String {
+    let args = capture_pane_args(pane_id, ansi);
+    let output = Command::new("tmux").args(&args).output();
 
     match output {
         Ok(out) => String::from_utf8_lossy(&out.stdout).into_owned(),
@@ -284,4 +307,12 @@ pub fn capture_pane(pane_id: &str) -> String {
             String::new()
         }
     }
+}
+
+pub fn capture_pane(pane_id: &str) -> String {
+    run_capture_pane(pane_id, false)
+}
+
+pub fn capture_pane_with_ansi(pane_id: &str) -> String {
+    run_capture_pane(pane_id, true)
 }
