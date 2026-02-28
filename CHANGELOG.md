@@ -2,10 +2,17 @@
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-02-28
+## [0.5.1] - 2026-02-28
+
+### Changed
+
+- Extract `tmux-claude-state` as a standalone crate published to crates.io
+- Add API doc comments to all public items in `tmux-claude-state`
+- Include README in both crate packages for crates.io
 
 ### Added
 
+- `capture_pane_with_ansi` function to capture tmux pane content with ANSI escape sequences
 - Auto-quiet mode: suppress pulse animations and stale alerts when the focused tmux pane is running Claude
   - Detects OS-level terminal focus via tmux `focus-events` and active pane command
   - Requires `set-option -g focus-events on` in tmux config for full support
@@ -92,8 +99,8 @@
 - Project renamed from `ccmonitor` to `claudeye`
 - Overlay window height adjusts dynamically per session row count
 
-[Unreleased]: https://github.com/maedana/claudeye/compare/v0.5.0...HEAD
-[0.5.0]: https://github.com/maedana/claudeye/compare/v0.4.0...v0.5.0
+[Unreleased]: https://github.com/maedana/claudeye/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/maedana/claudeye/compare/v0.4.0...v0.5.1
 [0.4.0]: https://github.com/maedana/claudeye/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/maedana/claudeye/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/maedana/claudeye/compare/v0.2.0...v0.2.1
