@@ -1,16 +1,24 @@
 use regex::Regex;
 use std::sync::OnceLock;
 
+/// The high-level state of a Claude Code session.
 #[derive(Debug, PartialEq, Clone)]
 pub enum ClaudeState {
+    /// Claude is actively processing (e.g. thinking, running tools).
     Working,
+    /// Claude is waiting for user approval (e.g. permission prompts, confirmations).
     WaitingForApproval,
+    /// Claude is idle at the input prompt.
     Idle,
 }
 
 const LAST_LINES_COUNT: usize = 30;
 
-/// Ported from tcmux parseClaudeStatus.
+/// Classify the state of a Claude Code session from captured tmux pane content.
+///
+/// Inspects the last non-empty lines of `content` and returns the detected
+/// [`ClaudeState`]. When no recognisable pattern is found the function
+/// falls back to [`ClaudeState::Idle`].
 pub fn detect_state(content: &str) -> ClaudeState {
     let lines: Vec<&str> = content.split('\n').collect();
     let last_lines = last_non_empty_lines(&lines, LAST_LINES_COUNT);

@@ -2,16 +2,22 @@ use std::collections::HashSet;
 use std::process::Command;
 use std::sync::OnceLock;
 
+/// Metadata for a tmux pane running Claude Code.
 #[derive(Debug, Clone)]
 pub struct PaneInfo {
+    /// Tmux pane identifier (e.g. `"my-session:0.1"`).
     pub id: String,
+    /// PID of the pane's foreground process.
     #[allow(dead_code)]
     pub pid: u32,
+    /// Current working directory of the pane.
     #[allow(dead_code)]
     pub cwd: String,
+    /// Basename of [`cwd`](Self::cwd), used as a short project label.
     pub project_name: String,
 }
 
+/// List all tmux panes across every session that are running Claude Code.
 pub fn list_claude_panes() -> Vec<PaneInfo> {
     let output = Command::new("tmux")
         .args([
@@ -34,6 +40,9 @@ pub fn list_claude_panes() -> Vec<PaneInfo> {
     }
 }
 
+/// Parse a single line of `tmux list-panes` output into a [`PaneInfo`].
+///
+/// Returns `None` if the line is malformed or the pane is not running Claude.
 pub fn parse_pane_line(line: &str) -> Option<PaneInfo> {
     let parts: Vec<&str> = line.splitn(4, ' ').collect();
     if parts.len() < 4 {
@@ -62,6 +71,7 @@ pub fn parse_pane_line(line: &str) -> Option<PaneInfo> {
     })
 }
 
+/// Switch the tmux client to the given pane via `tmux switch-client`.
 pub fn switch_to_pane(pane_id: &str) {
     let result = Command::new("tmux")
         .args(["switch-client", "-t", pane_id])
@@ -309,10 +319,16 @@ fn run_capture_pane(pane_id: &str, ansi: bool) -> String {
     }
 }
 
+/// Capture the visible content of a tmux pane as plain text.
+///
+/// Equivalent to `tmux capture-pane -p -t <pane_id>`.
 pub fn capture_pane(pane_id: &str) -> String {
     run_capture_pane(pane_id, false)
 }
 
+/// Capture the visible content of a tmux pane with ANSI escape sequences.
+///
+/// Equivalent to `tmux capture-pane -p -e -t <pane_id>`.
 pub fn capture_pane_with_ansi(pane_id: &str) -> String {
     run_capture_pane(pane_id, true)
 }

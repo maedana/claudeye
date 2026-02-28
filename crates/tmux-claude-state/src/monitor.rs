@@ -7,19 +7,28 @@ const POLL_INTERVAL_SECS: u64 = 2;
 use crate::claude_state::{ClaudeState, detect_state};
 use crate::tmux::{self, PaneInfo};
 
+/// A single Claude Code session with its detected state.
 #[derive(Debug, Clone)]
 pub struct ClaudeSession {
+    /// The tmux pane where this session is running.
     pub pane: PaneInfo,
+    /// The last detected state.
     pub state: ClaudeState,
+    /// When the current state was first observed.
     pub state_changed_at: Instant,
 }
 
+/// Shared snapshot of all monitored Claude sessions.
 #[derive(Debug, Clone, Default)]
 pub struct MonitorState {
+    /// All currently active Claude sessions.
     pub sessions: Vec<ClaudeSession>,
+    /// Whether a Claude pane is currently focused in the terminal.
     pub any_claude_focused: bool,
 }
 
+/// Spawn a background thread that polls tmux every 2 seconds, updating
+/// `state` with the latest [`MonitorState`].
 pub fn start_polling(state: Arc<Mutex<MonitorState>>) {
     thread::spawn(move || {
         loop {
