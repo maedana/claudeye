@@ -1,0 +1,39 @@
+# Changelog
+
+## [Unreleased]
+
+## [0.1.3] - 2026-03-03
+
+### Added
+
+- TTL-based cache refresh for claude version detection to reduce filesystem polling
+- CHANGELOG
+
+## [0.1.2] - 2026-03-02
+
+### Changed
+
+- Add keywords and categories to Cargo.toml for crates.io discoverability
+
+## [0.1.1] - 2026-02-28
+
+### Added
+
+- `capture_pane_with_ansi` function to capture tmux pane content with ANSI escape sequences
+- API doc comments for all public items
+- README for crates.io
+
+## [0.1.0] - 2026-02-28
+
+### Added
+
+- Initial release extracted from `claudeye` as a standalone crate
+- Claude session state detection via regex analysis of tmux pane content
+- Tmux helpers: `list_panes`, `capture_pane`, `switch_client`
+- Version cache for detecting claude binary names in tmux pane commands
+
+[Unreleased]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.3...HEAD
+[0.1.3]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.2...tmux-claude-state-v0.1.3
+[0.1.2]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.1...tmux-claude-state-v0.1.2
+[0.1.1]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.0...tmux-claude-state-v0.1.1
+[0.1.0]: https://github.com/maedana/claudeye/releases/tag/tmux-claude-state-v0.1.0
