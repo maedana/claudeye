@@ -143,10 +143,10 @@ pub fn refresh_version_cache() {
 }
 
 fn reload_entries(cache: &mut VersionCache) {
-    if let Some(ref dir) = cache.versions_dir {
-        if let Some(entries) = read_version_entries(dir) {
-            cache.names = entries;
-        }
+    if let Some(ref dir) = cache.versions_dir
+        && let Some(entries) = read_version_entries(dir)
+    {
+        cache.names = entries;
     }
     cache.last_refresh = Instant::now();
 }
