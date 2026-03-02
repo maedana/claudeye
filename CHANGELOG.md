@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-03
+
 ### Added
 
 - Mouse hover transparency: overlay fades out when the cursor hovers over it, then restores opacity when the cursor moves away
@@ -113,7 +115,8 @@
 - Project renamed from `ccmonitor` to `claudeye`
 - Overlay window height adjusts dynamically per session row count
 
-[Unreleased]: https://github.com/maedana/claudeye/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/maedana/claudeye/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/maedana/claudeye/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/maedana/claudeye/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/maedana/claudeye/compare/v0.4.0...v0.5.1
 [0.4.0]: https://github.com/maedana/claudeye/compare/v0.3.0...v0.4.0
