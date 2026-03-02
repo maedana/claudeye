@@ -1,6 +1,8 @@
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 /// Metadata for a tmux pane running Claude Code.
 #[derive(Debug, Clone)]
@@ -28,10 +30,14 @@ pub fn list_claude_panes() -> Vec<PaneInfo> {
         ])
         .output();
 
+    let version_names = claude_version_names();
     match output {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout);
-            stdout.lines().filter_map(parse_pane_line).collect()
+            stdout
+                .lines()
+                .filter_map(|line| parse_pane_line_with_versions(line, &version_names))
+                .collect()
         }
         Err(e) => {
             eprintln!("[claudeye] tmux list-panes failed: {e}");
@@ -40,10 +46,8 @@ pub fn list_claude_panes() -> Vec<PaneInfo> {
     }
 }
 
-/// Parse a single line of `tmux list-panes` output into a [`PaneInfo`].
-///
-/// Returns `None` if the line is malformed or the pane is not running Claude.
-pub fn parse_pane_line(line: &str) -> Option<PaneInfo> {
+/// Parse a tmux pane line, using the caller-provided version name set.
+fn parse_pane_line_with_versions(line: &str, version_names: &HashSet<String>) -> Option<PaneInfo> {
     let parts: Vec<&str> = line.splitn(4, ' ').collect();
     if parts.len() < 4 {
         return None;
@@ -51,9 +55,9 @@ pub fn parse_pane_line(line: &str) -> Option<PaneInfo> {
     let id = parts[0].to_string();
     let pid: u32 = parts[1].parse().ok()?;
     let cwd = parts[2].to_string();
-    let command = parts[3].to_string();
+    let command = parts[3].trim();
 
-    if !is_claude_command(command.trim()) {
+    if !is_claude_command_with_versions(command, version_names) {
         return None;
     }
 
@@ -71,6 +75,14 @@ pub fn parse_pane_line(line: &str) -> Option<PaneInfo> {
     })
 }
 
+/// Parse a single line of `tmux list-panes` output into a [`PaneInfo`].
+///
+/// Returns `None` if the line is malformed or the pane is not running Claude.
+pub fn parse_pane_line(line: &str) -> Option<PaneInfo> {
+    let version_names = claude_version_names();
+    parse_pane_line_with_versions(line, &version_names)
+}
+
 /// Switch the tmux client to the given pane via `tmux switch-client`.
 pub fn switch_to_pane(pane_id: &str) {
     let result = Command::new("tmux")
@@ -81,35 +93,85 @@ pub fn switch_to_pane(pane_id: &str) {
     }
 }
 
+fn is_claude_command_with_versions(command: &str, version_names: &HashSet<String>) -> bool {
+    command == "claude" || version_names.contains(command)
+}
+
 /// Check whether the tmux pane command corresponds to a claude process.
 fn is_claude_command(command: &str) -> bool {
-    if command == "claude" {
-        return true;
-    }
-    claude_version_names().contains(command)
+    is_claude_command_with_versions(command, &claude_version_names())
+}
+
+const VERSION_CACHE_TTL: Duration = Duration::from_secs(30);
+
+struct VersionCache {
+    names: HashSet<String>,
+    versions_dir: Option<PathBuf>,
+    last_refresh: Instant,
+}
+
+fn version_cache() -> &'static Mutex<VersionCache> {
+    static CACHE: OnceLock<Mutex<VersionCache>> = OnceLock::new();
+    CACHE.get_or_init(|| {
+        let (versions_dir, names) = init_version_cache();
+        Mutex::new(VersionCache {
+            names,
+            versions_dir,
+            last_refresh: Instant::now(),
+        })
+    })
 }
 
 /// On macOS, the `claude` binary is a symlink to a versioned path
 /// (e.g. `~/.local/share/claude/versions/2.1.50`), so tmux resolves
 /// the symlink and reports the version number as the command name.
-/// Since multiple versions may coexist (older sessions survive across
-/// upgrades), we cache all filenames in the versions directory at startup.
-/// On Linux (or when `claude` is not a symlink), this returns an empty set
-/// and detection falls back to the `command == "claude"` check above.
-fn claude_version_names() -> &'static HashSet<String> {
-    static NAMES: OnceLock<HashSet<String>> = OnceLock::new();
-    NAMES.get_or_init(|| resolve_claude_versions().unwrap_or_default())
+/// The versions directory path is resolved once at startup (`which claude`),
+/// while its contents are refreshed every 30 seconds so that new CLI
+/// versions installed while claudeye is running are detected.
+fn claude_version_names() -> HashSet<String> {
+    let mut cache = version_cache().lock().unwrap_or_else(|e| e.into_inner());
+    if cache.last_refresh.elapsed() >= VERSION_CACHE_TTL {
+        reload_entries(&mut cache);
+    }
+    cache.names.clone()
 }
 
-fn resolve_claude_versions() -> Option<HashSet<String>> {
+/// Force-refresh the version cache regardless of TTL.
+pub fn refresh_version_cache() {
+    let mut cache = version_cache().lock().unwrap_or_else(|e| e.into_inner());
+    reload_entries(&mut cache);
+}
+
+fn reload_entries(cache: &mut VersionCache) {
+    if let Some(ref dir) = cache.versions_dir {
+        if let Some(entries) = read_version_entries(dir) {
+            cache.names = entries;
+        }
+    }
+    cache.last_refresh = Instant::now();
+}
+
+fn init_version_cache() -> (Option<PathBuf>, HashSet<String>) {
+    let Some(dir) = resolve_versions_dir() else {
+        return (None, HashSet::new());
+    };
+    let names = read_version_entries(&dir).unwrap_or_default();
+    (Some(dir), names)
+}
+
+fn resolve_versions_dir() -> Option<PathBuf> {
     let output = Command::new("which").arg("claude").output().ok()?;
     if !output.status.success() {
         return None;
     }
     let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let target = std::fs::read_link(&path).ok()?;
-    let versions_dir = target.parent()?;
-    let entries = std::fs::read_dir(versions_dir)
+    Some(target.parent()?.to_path_buf())
+}
+
+/// Read version entries from a directory, returning filenames as a set.
+pub fn read_version_entries(dir: &Path) -> Option<HashSet<String>> {
+    let entries = std::fs::read_dir(dir)
         .ok()?
         .filter_map(|e| e.ok())
         .filter_map(|e| e.file_name().into_string().ok())

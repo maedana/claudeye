@@ -1,4 +1,4 @@
-use tmux_claude_state::tmux::parse_pane_line;
+use tmux_claude_state::tmux::{parse_pane_line, read_version_entries, refresh_version_cache};
 
 #[test]
 fn parse_valid_pane_line_claude() {
@@ -84,4 +84,64 @@ fn parse_pane_line_any_installed_claude_version_detected() {
 fn parse_pane_line_non_existent_version_not_detected() {
     let line = "main:1.1 74988 /Users/user/myapp 99.99.99";
     assert!(parse_pane_line(line).is_none());
+}
+
+#[test]
+fn read_version_entries_returns_filenames_from_directory() {
+    let dir = std::env::temp_dir().join(format!(
+        "claudeye_test_versions_{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("2.1.50"), "").unwrap();
+    std::fs::write(dir.join("2.2.0"), "").unwrap();
+
+    let entries = read_version_entries(&dir).unwrap();
+    assert!(entries.contains("2.1.50"));
+    assert!(entries.contains("2.2.0"));
+    assert_eq!(entries.len(), 2);
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn read_version_entries_returns_none_for_missing_directory() {
+    let dir = std::env::temp_dir().join(format!(
+        "claudeye_test_nonexistent_{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(read_version_entries(&dir).is_none());
+}
+
+/// Verifies that refresh_version_cache causes the cache to re-read
+/// the versions directory, so all currently installed versions are detected.
+#[test]
+fn refresh_version_cache_detects_installed_versions() {
+    let output = std::process::Command::new("which")
+        .arg("claude")
+        .output();
+    let Ok(out) = output else { return };
+    if !out.status.success() {
+        return;
+    }
+    let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let Ok(target) = std::fs::read_link(&path) else { return };
+    let Some(versions_dir) = target.parent() else { return };
+
+    refresh_version_cache();
+
+    let Ok(rd) = std::fs::read_dir(versions_dir) else { return };
+    let entries: Vec<_> = rd
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().into_string().ok())
+        .collect();
+    for name in &entries {
+        let line = format!("main:1.1 74988 /Users/user/myapp {name}");
+        assert!(
+            parse_pane_line(&line).is_some(),
+            "after refresh, should detect version '{name}'"
+        );
+    }
 }
