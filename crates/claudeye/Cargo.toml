@@ -20,3 +20,6 @@ eframe = "0.30"
 egui = "0.30"
 ratatui = "0.29"
 tmux-claude-state = { path = "../tmux-claude-state", version = "0.1.1" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.24"

@@ -1,3 +1,4 @@
+mod cursor;
 mod picker;
 
 use clap::{Parser, Subcommand};
@@ -79,6 +80,10 @@ const WINDOW_PADDING: f32 = 8.0;
 const MARGIN: f32 = 2.0;
 /// Horizontal overhead per session row (panel margin + robot art + spacing + bubble padding + buffer).
 const ROW_HORIZONTAL_OVERHEAD: f32 = 82.0;
+/// Opacity when cursor hovers over the overlay (0.0 = invisible, 1.0 = fully opaque).
+const HOVER_OPACITY: f32 = 0.0;
+/// Lerp factor per frame for hover opacity animation (higher = faster).
+const HOVER_LERP_FACTOR: f32 = 0.25;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
@@ -112,6 +117,7 @@ fn run_gui(compact: bool, position: Position, alert_on_stale: bool) -> eframe::R
                 compact,
                 position,
                 alert_on_stale,
+                hover_opacity: 1.0,
             }))
         }),
     )
@@ -122,6 +128,7 @@ struct CcMonitorApp {
     compact: bool,
     position: Position,
     alert_on_stale: bool,
+    hover_opacity: f32,
 }
 
 impl eframe::App for CcMonitorApp {
@@ -238,6 +245,7 @@ impl eframe::App for CcMonitorApp {
                 window_height,
             )));
 
+            let mut is_hovering = false;
             if let Some(monitor_size) = ctx.input(|i| i.viewport().monitor_size) {
                 let effective_position =
                     if self.alert_on_stale && !quiet && should_alert_on_stale(&sessions) {
@@ -248,7 +256,32 @@ impl eframe::App for CcMonitorApp {
                 let pos = effective_position
                     .compute(monitor_size, Vec2::new(window_width, window_height));
                 ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
+
+                is_hovering = cursor::get_cursor_screen_position()
+                    .map(|(cx, cy)| {
+                        cursor::is_cursor_in_rect(
+                            cx,
+                            cy,
+                            pos.x,
+                            pos.y,
+                            window_width,
+                            window_height,
+                        )
+                    })
+                    .unwrap_or(false);
             }
+
+            let target_opacity = if is_hovering { HOVER_OPACITY } else { 1.0 };
+            self.hover_opacity =
+                cursor::lerp_opacity(self.hover_opacity, target_opacity, HOVER_LERP_FACTOR);
+
+            let animating =
+                (self.hover_opacity - target_opacity).abs() > cursor::OPACITY_SNAP_THRESHOLD;
+            if animating || is_hovering {
+                ctx.request_repaint_after(std::time::Duration::from_millis(16));
+            }
+
+            let hover_opacity = self.hover_opacity;
 
             egui::CentralPanel::default()
                 .frame(
@@ -260,12 +293,12 @@ impl eframe::App for CcMonitorApp {
                     if display_sessions.is_empty() {
                         ui.label(
                             RichText::new("No Claude sessions found")
-                                .color(Color32::from_gray(120))
+                                .color(apply_opacity(Color32::from_gray(120), hover_opacity))
                                 .size(12.0),
                         );
                     } else {
                         for session in &display_sessions {
-                            render_session_row(ui, session, time, quiet);
+                            render_session_row(ui, session, time, quiet, hover_opacity);
                         }
                     }
                 });
@@ -290,6 +323,11 @@ fn measure_session_text_width(ctx: &egui::Context, session: &ClaudeSession) -> f
     })
 }
 
+fn apply_opacity(color: Color32, opacity: f32) -> Color32 {
+    let [r, g, b, a] = color.to_array();
+    Color32::from_rgba_unmultiplied(r, g, b, (a as f32 * opacity) as u8)
+}
+
 /// Determine whether a session should pulse based on its state, elapsed time, and quiet mode.
 ///
 /// When `quiet` is true (Claude pane is focused and tmux client is active),
@@ -312,13 +350,20 @@ fn calc_stroke_width(time: f64, pulse: bool) -> f32 {
     }
 }
 
-fn render_session_row(ui: &mut Ui, session: &ClaudeSession, time: f64, quiet: bool) {
+fn render_session_row(
+    ui: &mut Ui,
+    session: &ClaudeSession,
+    time: f64,
+    quiet: bool,
+    hover_opacity: f32,
+) {
     let (state_color, label) = match &session.state {
         ClaudeState::Working => (Color32::from_rgb(80, 200, 80), "Running"),
         ClaudeState::WaitingForApproval => (Color32::from_rgb(220, 180, 0), "Approval"),
         ClaudeState::Idle => (Color32::from_gray(160), "Idle"),
     };
 
+    let state_color = apply_opacity(state_color, hover_opacity);
     let elapsed = session.state_changed_at.elapsed().as_secs();
     let pulse = should_pulse(&session.state, elapsed, quiet);
     let stroke_width = calc_stroke_width(time, pulse);
@@ -329,7 +374,7 @@ fn render_session_row(ui: &mut Ui, session: &ClaudeSession, time: f64, quiet: bo
         ui.allocate_ui(egui::Vec2::new(40.0, ROW_HEIGHT), |ui| {
             ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.y = 0.0;
-                let o = Color32::from_rgb(210, 110, 30); // orange
+                let o = apply_opacity(Color32::from_rgb(210, 110, 30), hover_opacity);
                 let lines: [(&str, Color32); 4] = [
                     ("▟█▙", state_color),
                     ("▐▛███▜▌", o),
@@ -348,7 +393,8 @@ fn render_session_row(ui: &mut Ui, session: &ClaudeSession, time: f64, quiet: bo
         // Clamp bubble width to remaining available space (minus inner padding + stroke)
         let max_label_width = (ui.available_width() - 14.0).max(0.0);
 
-        let bubble_fill = Color32::from_rgba_unmultiplied(30, 30, 45, 220);
+        let bubble_fill =
+            apply_opacity(Color32::from_rgba_unmultiplied(30, 30, 45, 220), hover_opacity);
         let inner = egui::Frame::none()
             .fill(bubble_fill)
             .stroke(egui::Stroke::new(stroke_width, state_color))
@@ -763,5 +809,26 @@ mod tests {
     #[test]
     fn pulse_working_quiet() {
         assert!(!should_pulse(&ClaudeState::Working, 10, true));
+    }
+
+    #[test]
+    fn apply_opacity_full() {
+        let c = Color32::from_rgba_unmultiplied(100, 150, 200, 255);
+        let result = apply_opacity(c, 1.0);
+        assert_eq!(result, Color32::from_rgba_unmultiplied(100, 150, 200, 255));
+    }
+
+    #[test]
+    fn apply_opacity_half_alpha() {
+        let c = Color32::from_rgba_unmultiplied(100, 150, 200, 200);
+        let result = apply_opacity(c, 0.5);
+        assert_eq!(result.a(), 100);
+    }
+
+    #[test]
+    fn apply_opacity_zero() {
+        let c = Color32::from_rgb(100, 150, 200);
+        let result = apply_opacity(c, 0.0);
+        assert_eq!(result, Color32::from_rgba_unmultiplied(100, 150, 200, 0));
     }
 }
