@@ -9,7 +9,54 @@ pub fn get_cursor_screen_position() -> Option<(f64, f64)> {
     Some((point.x, point.y))
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+pub fn get_cursor_screen_position() -> Option<(f64, f64)> {
+    use std::mem::MaybeUninit;
+    use std::ptr;
+    use x11_dl::xlib;
+
+    unsafe {
+        let xlib = xlib::Xlib::open().ok()?;
+        let display = (xlib.XOpenDisplay)(ptr::null());
+        if display.is_null() {
+            return None;
+        }
+
+        let screen = (xlib.XDefaultScreen)(display);
+        let root = (xlib.XRootWindow)(display, screen);
+
+        let mut root_return = MaybeUninit::uninit();
+        let mut child_return = MaybeUninit::uninit();
+        let mut root_x = MaybeUninit::uninit();
+        let mut root_y = MaybeUninit::uninit();
+        let mut win_x = MaybeUninit::uninit();
+        let mut win_y = MaybeUninit::uninit();
+        let mut mask = MaybeUninit::uninit();
+
+        let ok = (xlib.XQueryPointer)(
+            display,
+            root,
+            root_return.as_mut_ptr(),
+            child_return.as_mut_ptr(),
+            root_x.as_mut_ptr(),
+            root_y.as_mut_ptr(),
+            win_x.as_mut_ptr(),
+            win_y.as_mut_ptr(),
+            mask.as_mut_ptr(),
+        );
+
+        let result = if ok != 0 {
+            Some((root_x.assume_init() as f64, root_y.assume_init() as f64))
+        } else {
+            None
+        };
+
+        (xlib.XCloseDisplay)(display);
+        result
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn get_cursor_screen_position() -> Option<(f64, f64)> {
     None
 }

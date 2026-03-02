@@ -749,6 +749,7 @@ dependencies = [
  "egui",
  "ratatui",
  "tmux-claude-state",
+ "x11-dl",
 ]
 
 [[package]]
