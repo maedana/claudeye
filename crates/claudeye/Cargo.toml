@@ -1,11 +1,13 @@
 [package]
 name = "claudeye"
-version = "0.5.1"
+version = "0.5.2"
 edition = "2024"
 readme = "../../README.md"
 description = "Claude session monitor overlay for tmux"
 license = "MIT"
 repository = "https://github.com/maedana/claudeye"
+keywords = ["tmux", "claude", "monitor", "tui", "ai"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "claudeye"

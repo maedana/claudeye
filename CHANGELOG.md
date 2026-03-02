@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-03-02
+
+### Changed
+
+- Add keywords and categories to Cargo.toml for crates.io discoverability
+
 ## [0.5.1] - 2026-02-28
 
 ### Changed
@@ -99,7 +105,8 @@
 - Project renamed from `ccmonitor` to `claudeye`
 - Overlay window height adjusts dynamically per session row count
 
-[Unreleased]: https://github.com/maedana/claudeye/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/maedana/claudeye/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/maedana/claudeye/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/maedana/claudeye/compare/v0.4.0...v0.5.1
 [0.4.0]: https://github.com/maedana/claudeye/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/maedana/claudeye/compare/v0.2.1...v0.3.0
