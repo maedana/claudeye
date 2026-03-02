@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Mouse hover transparency: overlay fades out when the cursor hovers over it, then restores opacity when the cursor moves away
+  - macOS: uses CoreGraphics for cursor position detection
+  - Linux (X11): uses `XQueryPointer` via `x11-dl` for cursor position detection
+  - Wayland / other platforms: hover transparency is disabled (graceful degradation)
+- TTL-based cache refresh for claude version detection to reduce filesystem polling
+
 ## [0.5.2] - 2026-03-02
 
 ### Changed

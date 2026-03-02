@@ -19,7 +19,7 @@ Each session is shown as a mini Clawd (the Claude robot mascot) with a color-cod
 - **tmux** — must be installed and running. claudeye uses `tmux list-panes` and `tmux capture-pane` to discover and read Claude sessions.
 - **Claude Code** (`claude` CLI) — sessions must be running inside tmux panes. claudeye identifies panes where the current command is `claude`.
 - **Rust toolchain** — install via [rustup](https://rustup.rs/)
-- **Linux with X11** — tested on X11; Wayland is untested. Standard X11 libraries are required (typically pre-installed).
+- **macOS** or **Linux with X11** — on Linux, tested on X11; Wayland is supported but mouse hover transparency is unavailable. Standard X11 libraries are required (typically pre-installed).
 
 ## Installation
 
@@ -111,6 +111,7 @@ The overlay window is:
 - Always on top of other windows
 - Click-through (mouse events pass through to windows below)
 - Fully transparent background
+- Fades out when the mouse cursor hovers over it (macOS and Linux/X11)
 
 ### Picker mode
 
