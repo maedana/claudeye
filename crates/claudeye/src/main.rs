@@ -75,6 +75,39 @@ impl Position {
     }
 }
 
+/// Try to load a CJK font from the system for Japanese/Chinese/Korean text rendering.
+fn load_cjk_font() -> Option<egui::FontData> {
+    use font_kit::family_name::FamilyName;
+    use font_kit::properties::Properties;
+    use font_kit::source::SystemSource;
+
+    let families = [
+        // Linux
+        "Noto Sans CJK JP",
+        "Noto Sans JP",
+        // macOS
+        "Hiragino Sans",
+        "Hiragino Kaku Gothic ProN",
+        // Windows
+        "Yu Gothic",
+        "MS Gothic",
+    ];
+
+    let source = SystemSource::new();
+    for name in &families {
+        if let Ok(handle) =
+            source.select_best_match(&[FamilyName::Title(name.to_string())], &Properties::new())
+        {
+            if let Ok(font) = handle.load() {
+                if let Some(data) = font.copy_font_data() {
+                    return Some(egui::FontData::from_owned((*data).clone()));
+                }
+            }
+        }
+    }
+    None
+}
+
 const REPAINT_INTERVAL_SECS: u64 = 2;
 const STALE_MIN_SECS: u64 = 5;
 const STALE_MAX_SECS: u64 = 15;
@@ -252,6 +285,19 @@ fn run_gui(
         "claudeye",
         options,
         Box::new(|cc| {
+            if let Some(cjk_font) = load_cjk_font() {
+                let mut fonts = egui::FontDefinitions::default();
+                fonts
+                    .font_data
+                    .insert("cjk_font".to_owned(), cjk_font.into());
+                fonts
+                    .families
+                    .entry(egui::FontFamily::Proportional)
+                    .or_default()
+                    .push("cjk_font".to_owned());
+                cc.egui_ctx.set_fonts(fonts);
+            }
+
             let mut visuals = cc.egui_ctx.style().visuals.clone();
             visuals.panel_fill = Color32::TRANSPARENT;
             cc.egui_ctx.set_visuals(visuals);
@@ -1206,5 +1252,22 @@ mod tests {
         let s = make_crmux_session_with_title("proj", None, Some("fix bug"), None, None, 10);
         let label = format_crmux_label(&s, "Idle");
         assert_eq!(label, "proj  fix bug  [Idle] 10s");
+    }
+
+    #[test]
+    fn format_crmux_label_with_japanese_title() {
+        let s = make_crmux_session_with_title(
+            "crmux",
+            Some("main"),
+            Some("日本語タイトルのテスト"),
+            Some("Opus"),
+            Some(42),
+            60,
+        );
+        let label = format_crmux_label(&s, "Running");
+        assert_eq!(
+            label,
+            "crmux (main)  日本語タイトルのテスト  Opus  42%  [Running] 60s"
+        );
     }
 }
