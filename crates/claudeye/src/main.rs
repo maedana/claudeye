@@ -85,6 +85,8 @@ const WINDOW_PADDING: f32 = 8.0;
 const MARGIN: f32 = 2.0;
 /// Horizontal overhead per session row (panel margin + robot art + spacing + bubble padding + buffer).
 const ROW_HORIZONTAL_OVERHEAD: f32 = 82.0;
+/// Base color for the robot body art.
+const ROBOT_BODY_COLOR: Color32 = Color32::from_rgb(210, 110, 30);
 /// Opacity when cursor hovers over the overlay (0.0 = invisible, 1.0 = fully opaque).
 const HOVER_OPACITY: f32 = 0.0;
 /// Lerp factor per frame for hover opacity animation (higher = faster).
@@ -145,6 +147,11 @@ pub fn format_crmux_label(session: &CrmuxSession, state_label: &str) -> String {
         parts.push(format!("{} ({})", session.project_name, branch));
     } else {
         parts.push(session.project_name.clone());
+    }
+
+    // title
+    if let Some(ref title) = session.title {
+        parts.push(title.clone());
     }
 
     // model
@@ -244,7 +251,10 @@ fn run_gui(
     eframe::run_native(
         "claudeye",
         options,
-        Box::new(|_cc| {
+        Box::new(|cc| {
+            let mut visuals = cc.egui_ctx.style().visuals.clone();
+            visuals.panel_fill = Color32::TRANSPARENT;
+            cc.egui_ctx.set_visuals(visuals);
             Ok(Box::new(CcMonitorApp {
                 state,
                 crmux_state,
@@ -274,10 +284,6 @@ impl eframe::App for CcMonitorApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let mut visuals = ctx.style().visuals.clone();
-        visuals.panel_fill = Color32::TRANSPARENT;
-        ctx.set_visuals(visuals);
-
         ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(
             egui::WindowLevel::AlwaysOnTop,
         ));
@@ -561,11 +567,17 @@ fn render_robot_art(ui: &mut Ui, state_color: Color32, body_color: Color32) {
 }
 
 fn state_color_and_label(state: &ClaudeState) -> (Color32, &'static str) {
-    match state {
-        ClaudeState::Working => (Color32::from_rgb(80, 200, 80), "Running"),
-        ClaudeState::WaitingForApproval => (Color32::from_rgb(220, 180, 0), "Approval"),
-        ClaudeState::Idle => (Color32::from_gray(160), "Idle"),
-    }
+    let color = match state {
+        ClaudeState::Working => Color32::from_rgb(80, 200, 80),
+        ClaudeState::WaitingForApproval => Color32::from_rgb(220, 180, 0),
+        ClaudeState::Idle => Color32::from_gray(160),
+    };
+    (color, state.display_label())
+}
+
+/// Base fill color for speech bubbles.
+fn bubble_fill_color() -> Color32 {
+    Color32::from_rgba_unmultiplied(30, 30, 45, 220)
 }
 
 fn apply_opacity(color: Color32, opacity: f32) -> Color32 {
@@ -610,9 +622,8 @@ fn render_crmux_session_row(
 
     let display_text = format_crmux_label(crmux_session, label);
 
-    let body_color = apply_opacity(Color32::from_rgb(210, 110, 30), hover_opacity);
-    let bubble_fill =
-        apply_opacity(Color32::from_rgba_unmultiplied(30, 30, 45, 220), hover_opacity);
+    let body_color = apply_opacity(ROBOT_BODY_COLOR, hover_opacity);
+    let bubble_fill = apply_opacity(bubble_fill_color(), hover_opacity);
 
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
@@ -653,9 +664,8 @@ fn render_session_row(
     let pulse = should_pulse(&session.state, elapsed, quiet);
     let stroke_width = calc_stroke_width(time, pulse);
 
-    let body_color = apply_opacity(Color32::from_rgb(210, 110, 30), hover_opacity);
-    let bubble_fill =
-        apply_opacity(Color32::from_rgba_unmultiplied(30, 30, 45, 220), hover_opacity);
+    let body_color = apply_opacity(ROBOT_BODY_COLOR, hover_opacity);
+    let bubble_fill = apply_opacity(bubble_fill_color(), hover_opacity);
 
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
@@ -726,8 +736,8 @@ fn render_compact_row(ui: &mut Ui, summaries: &[StateSummary], time: f64, stale_
                 || (stale_idle && matches!(summary.state, ClaudeState::Idle));
             let stroke_width = calc_stroke_width(time, pulse);
 
-            let body_color = Color32::from_rgb(210, 110, 30);
-            let bubble_fill = Color32::from_rgba_unmultiplied(30, 30, 45, 220);
+            let body_color = ROBOT_BODY_COLOR;
+            let bubble_fill = bubble_fill_color();
 
             render_robot_art(ui, state_color, body_color);
 
@@ -741,7 +751,7 @@ fn render_compact_row(ui: &mut Ui, summaries: &[StateSummary], time: f64, stale_
                 None,
                 |ui| {
                     ui.label(
-                        RichText::new(format!("{}", summary.count))
+                        RichText::new(summary.count.to_string())
                             .color(state_color)
                             .size(11.0),
                     );
@@ -1121,6 +1131,17 @@ mod tests {
         context: Option<u32>,
         elapsed: u64,
     ) -> CrmuxSession {
+        make_crmux_session_with_title(project, branch, None, model, context, elapsed)
+    }
+
+    fn make_crmux_session_with_title(
+        project: &str,
+        branch: Option<&str>,
+        title: Option<&str>,
+        model: Option<&str>,
+        context: Option<u32>,
+        elapsed: u64,
+    ) -> CrmuxSession {
         CrmuxSession {
             pane_id: "%1".to_string(),
             pid: 1,
@@ -1129,7 +1150,7 @@ mod tests {
             elapsed_secs: elapsed,
             model: model.map(|s| s.to_string()),
             context_percent: context,
-            title: None,
+            title: title.map(|s| s.to_string()),
             session_id: None,
             git_branch: branch.map(|s| s.to_string()),
         }
@@ -1161,5 +1182,29 @@ mod tests {
         let s = make_crmux_session("proj", None, None, None, 0);
         let label = format_crmux_label(&s, "Running");
         assert_eq!(label, "proj  [Running] 0s");
+    }
+
+    #[test]
+    fn format_crmux_label_with_title() {
+        let s = make_crmux_session_with_title(
+            "crmux",
+            Some("main"),
+            Some("implementing feature X"),
+            Some("Opus"),
+            Some(23),
+            45,
+        );
+        let label = format_crmux_label(&s, "Running");
+        assert_eq!(
+            label,
+            "crmux (main)  implementing feature X  Opus  23%  [Running] 45s"
+        );
+    }
+
+    #[test]
+    fn format_crmux_label_with_title_no_branch() {
+        let s = make_crmux_session_with_title("proj", None, Some("fix bug"), None, None, 10);
+        let label = format_crmux_label(&s, "Idle");
+        assert_eq!(label, "proj  fix bug  [Idle] 10s");
     }
 }

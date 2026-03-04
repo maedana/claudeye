@@ -157,11 +157,12 @@ fn render(f: &mut ratatui::Frame, picker: &PickerState) {
 }
 
 fn state_display(state: &ClaudeState) -> (&'static str, Color, &'static str) {
-    match state {
-        ClaudeState::Working => ("●", Color::Green, "Running"),
-        ClaudeState::WaitingForApproval => ("●", Color::Yellow, "Approval"),
-        ClaudeState::Idle => ("○", Color::Gray, "Idle"),
-    }
+    let (indicator, color) = match state {
+        ClaudeState::Working => ("●", Color::Green),
+        ClaudeState::WaitingForApproval => ("●", Color::Yellow),
+        ClaudeState::Idle => ("○", Color::Gray),
+    };
+    (indicator, color, state.display_label())
 }
 
 #[cfg(test)]

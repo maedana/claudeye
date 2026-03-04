@@ -28,10 +28,7 @@ pub fn decode_response(data: &[u8]) -> io::Result<(u32, serde_json::Value)> {
     }
 
     if !resp.2.is_null() {
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("rpc error: {}", resp.2),
-        ));
+        return Err(io::Error::other(format!("rpc error: {}", resp.2)));
     }
 
     Ok((resp.1, resp.3))

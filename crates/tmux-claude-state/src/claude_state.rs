@@ -12,6 +12,17 @@ pub enum ClaudeState {
     Idle,
 }
 
+impl ClaudeState {
+    /// Human-readable label for display (e.g. "Running", "Approval", "Idle").
+    pub fn display_label(&self) -> &'static str {
+        match self {
+            ClaudeState::Working => "Running",
+            ClaudeState::WaitingForApproval => "Approval",
+            ClaudeState::Idle => "Idle",
+        }
+    }
+}
+
 const LAST_LINES_COUNT: usize = 30;
 
 /// Classify the state of a Claude Code session from captured tmux pane content.
