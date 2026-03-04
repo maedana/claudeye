@@ -480,11 +480,7 @@ impl eframe::App for CcMonitorApp {
 /// State label is fixed to the longest value ("Approval") and elapsed to a
 /// wide placeholder ("9999s") to prevent jitter from state transitions or
 /// ticking seconds.
-fn measure_session_text_width(ctx: &egui::Context, session: &ClaudeSession) -> f32 {
-    let text = format!(
-        "{}  {}  [{}] {}",
-        session.pane.id, session.pane.project_name, "Approval", "9999s"
-    );
+fn measure_text_width(ctx: &egui::Context, text: String) -> f32 {
     let font_id = egui::FontId::proportional(11.0);
     ctx.fonts(|fonts| {
         let galley = fonts.layout_no_wrap(text, font_id, Color32::WHITE);
@@ -492,14 +488,84 @@ fn measure_session_text_width(ctx: &egui::Context, session: &ClaudeSession) -> f
     })
 }
 
+fn measure_session_text_width(ctx: &egui::Context, session: &ClaudeSession) -> f32 {
+    let text = format!(
+        "{}  {}  [{}] {}",
+        session.pane.id, session.pane.project_name, "Approval", "9999s"
+    );
+    measure_text_width(ctx, text)
+}
+
 /// Measure the rendered text width of a crmux session row.
 fn measure_crmux_text_width(ctx: &egui::Context, session: &CrmuxSession) -> f32 {
     let text = format_crmux_label(session, "Approval");
-    let font_id = egui::FontId::proportional(11.0);
-    ctx.fonts(|fonts| {
-        let galley = fonts.layout_no_wrap(text, font_id, Color32::WHITE);
-        galley.size().x
-    })
+    measure_text_width(ctx, text)
+}
+
+fn render_speech_bubble_with_tail(
+    ui: &mut Ui,
+    stroke_width: f32,
+    state_color: Color32,
+    bubble_fill: Color32,
+    max_label_width: Option<f32>,
+    content: impl FnOnce(&mut Ui),
+) {
+    let inner = egui::Frame::none()
+        .fill(bubble_fill)
+        .stroke(egui::Stroke::new(stroke_width, state_color))
+        .rounding(egui::Rounding::same(5.0))
+        .inner_margin(egui::Margin::symmetric(6.0, 2.0))
+        .show(ui, |ui: &mut Ui| {
+            if let Some(w) = max_label_width {
+                ui.set_max_width(w);
+            }
+            content(ui);
+        });
+
+    let rect = inner.response.rect;
+    let mid_y = rect.center().y;
+    let tail_tip = egui::pos2(rect.left() - 4.0, mid_y);
+    let tail_top = egui::pos2(rect.left(), mid_y - 4.0);
+    let tail_bot = egui::pos2(rect.left(), mid_y + 4.0);
+    let painter = ui.painter();
+    painter.add(egui::Shape::convex_polygon(
+        vec![tail_tip, tail_top, tail_bot],
+        bubble_fill,
+        egui::Stroke::NONE,
+    ));
+    painter.line_segment(
+        [tail_tip, tail_top],
+        egui::Stroke::new(stroke_width, state_color),
+    );
+    painter.line_segment(
+        [tail_tip, tail_bot],
+        egui::Stroke::new(stroke_width, state_color),
+    );
+}
+
+fn render_robot_art(ui: &mut Ui, state_color: Color32, body_color: Color32) {
+    ui.allocate_ui(egui::Vec2::new(40.0, ROW_HEIGHT), |ui| {
+        ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.y = 0.0;
+            let lines: [(&str, Color32); 4] = [
+                ("▟█▙", state_color),
+                ("▐▛███▜▌", body_color),
+                ("▝▜█████▛▘", body_color),
+                ("▘▘ ▝▝", body_color),
+            ];
+            for (text, color) in lines {
+                ui.label(RichText::new(text).size(5.0).color(color).monospace());
+            }
+        });
+    });
+}
+
+fn state_color_and_label(state: &ClaudeState) -> (Color32, &'static str) {
+    match state {
+        ClaudeState::Working => (Color32::from_rgb(80, 200, 80), "Running"),
+        ClaudeState::WaitingForApproval => (Color32::from_rgb(220, 180, 0), "Approval"),
+        ClaudeState::Idle => (Color32::from_gray(160), "Idle"),
+    }
 }
 
 fn apply_opacity(color: Color32, opacity: f32) -> Color32 {
@@ -536,11 +602,7 @@ fn render_crmux_session_row(
     time: f64,
     hover_opacity: f32,
 ) {
-    let (state_color, label) = match &session.state {
-        ClaudeState::Working => (Color32::from_rgb(80, 200, 80), "Running"),
-        ClaudeState::WaitingForApproval => (Color32::from_rgb(220, 180, 0), "Approval"),
-        ClaudeState::Idle => (Color32::from_gray(160), "Idle"),
-    };
+    let (state_color, label) = state_color_and_label(&session.state);
 
     let state_color = apply_opacity(state_color, hover_opacity);
     let pulse = should_pulse(&session.state, crmux_session.elapsed_secs, false);
@@ -548,62 +610,31 @@ fn render_crmux_session_row(
 
     let display_text = format_crmux_label(crmux_session, label);
 
+    let body_color = apply_opacity(Color32::from_rgb(210, 110, 30), hover_opacity);
+    let bubble_fill =
+        apply_opacity(Color32::from_rgba_unmultiplied(30, 30, 45, 220), hover_opacity);
+
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
-        ui.allocate_ui(egui::Vec2::new(40.0, ROW_HEIGHT), |ui| {
-            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                ui.spacing_mut().item_spacing.y = 0.0;
-                let o = apply_opacity(Color32::from_rgb(210, 110, 30), hover_opacity);
-                let lines: [(&str, Color32); 4] = [
-                    ("▟█▙", state_color),
-                    ("▐▛███▜▌", o),
-                    ("▝▜█████▛▘", o),
-                    ("▘▘ ▝▝", o),
-                ];
-                for (text, color) in lines {
-                    ui.label(RichText::new(text).size(5.0).color(color).monospace());
-                }
-            });
-        });
+        render_robot_art(ui, state_color, body_color);
 
         ui.add_space(2.0);
 
         let max_label_width = (ui.available_width() - 14.0).max(0.0);
 
-        let bubble_fill =
-            apply_opacity(Color32::from_rgba_unmultiplied(30, 30, 45, 220), hover_opacity);
-        let inner = egui::Frame::none()
-            .fill(bubble_fill)
-            .stroke(egui::Stroke::new(stroke_width, state_color))
-            .rounding(egui::Rounding::same(5.0))
-            .inner_margin(egui::Margin::symmetric(6.0, 2.0))
-            .show(ui, |ui: &mut Ui| {
-                ui.set_max_width(max_label_width);
+        render_speech_bubble_with_tail(
+            ui,
+            stroke_width,
+            state_color,
+            bubble_fill,
+            Some(max_label_width),
+            |ui| {
                 ui.label(
                     RichText::new(display_text)
                         .color(state_color)
                         .size(11.0),
                 );
-            });
-
-        let rect = inner.response.rect;
-        let mid_y = rect.center().y;
-        let tail_tip = egui::pos2(rect.left() - 4.0, mid_y);
-        let tail_top = egui::pos2(rect.left(), mid_y - 4.0);
-        let tail_bot = egui::pos2(rect.left(), mid_y + 4.0);
-        let painter = ui.painter();
-        painter.add(egui::Shape::convex_polygon(
-            vec![tail_tip, tail_top, tail_bot],
-            bubble_fill,
-            egui::Stroke::NONE,
-        ));
-        painter.line_segment(
-            [tail_tip, tail_top],
-            egui::Stroke::new(stroke_width, state_color),
-        );
-        painter.line_segment(
-            [tail_tip, tail_bot],
-            egui::Stroke::new(stroke_width, state_color),
+            },
         );
     });
 }
@@ -615,51 +646,32 @@ fn render_session_row(
     quiet: bool,
     hover_opacity: f32,
 ) {
-    let (state_color, label) = match &session.state {
-        ClaudeState::Working => (Color32::from_rgb(80, 200, 80), "Running"),
-        ClaudeState::WaitingForApproval => (Color32::from_rgb(220, 180, 0), "Approval"),
-        ClaudeState::Idle => (Color32::from_gray(160), "Idle"),
-    };
+    let (state_color, label) = state_color_and_label(&session.state);
 
     let state_color = apply_opacity(state_color, hover_opacity);
     let elapsed = session.state_changed_at.elapsed().as_secs();
     let pulse = should_pulse(&session.state, elapsed, quiet);
     let stroke_width = calc_stroke_width(time, pulse);
 
+    let body_color = apply_opacity(Color32::from_rgb(210, 110, 30), hover_opacity);
+    let bubble_fill =
+        apply_opacity(Color32::from_rgba_unmultiplied(30, 30, 45, 220), hover_opacity);
+
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
-        // Mini robot art or spinner (fixed-width column, center-aligned)
-        ui.allocate_ui(egui::Vec2::new(40.0, ROW_HEIGHT), |ui| {
-            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                ui.spacing_mut().item_spacing.y = 0.0;
-                let o = apply_opacity(Color32::from_rgb(210, 110, 30), hover_opacity);
-                let lines: [(&str, Color32); 4] = [
-                    ("▟█▙", state_color),
-                    ("▐▛███▜▌", o),
-                    ("▝▜█████▛▘", o),
-                    ("▘▘ ▝▝", o),
-                ];
-                for (text, color) in lines {
-                    ui.label(RichText::new(text).size(5.0).color(color).monospace());
-                }
-            });
-        });
+        render_robot_art(ui, state_color, body_color);
 
-        // Speech bubble with tail pointing left toward robot
-        ui.add_space(2.0); // space for the tail triangle
+        ui.add_space(2.0);
 
-        // Clamp bubble width to remaining available space (minus inner padding + stroke)
         let max_label_width = (ui.available_width() - 14.0).max(0.0);
 
-        let bubble_fill =
-            apply_opacity(Color32::from_rgba_unmultiplied(30, 30, 45, 220), hover_opacity);
-        let inner = egui::Frame::none()
-            .fill(bubble_fill)
-            .stroke(egui::Stroke::new(stroke_width, state_color))
-            .rounding(egui::Rounding::same(5.0))
-            .inner_margin(egui::Margin::symmetric(6.0, 2.0))
-            .show(ui, |ui: &mut Ui| {
-                ui.set_max_width(max_label_width);
+        render_speech_bubble_with_tail(
+            ui,
+            stroke_width,
+            state_color,
+            bubble_fill,
+            Some(max_label_width),
+            |ui| {
                 ui.label(
                     RichText::new(format!(
                         "{}  {}  [{}] {}s",
@@ -668,27 +680,7 @@ fn render_session_row(
                     .color(state_color)
                     .size(11.0),
                 );
-            });
-
-        // Draw tail triangle pointing left toward the robot
-        let rect = inner.response.rect;
-        let mid_y = rect.center().y;
-        let tail_tip = egui::pos2(rect.left() - 4.0, mid_y);
-        let tail_top = egui::pos2(rect.left(), mid_y - 4.0);
-        let tail_bot = egui::pos2(rect.left(), mid_y + 4.0);
-        let painter = ui.painter();
-        painter.add(egui::Shape::convex_polygon(
-            vec![tail_tip, tail_top, tail_bot],
-            bubble_fill,
-            egui::Stroke::NONE,
-        ));
-        painter.line_segment(
-            [tail_tip, tail_top],
-            egui::Stroke::new(stroke_width, state_color),
-        );
-        painter.line_segment(
-            [tail_tip, tail_bot],
-            egui::Stroke::new(stroke_width, state_color),
+            },
         );
     });
 }
@@ -728,68 +720,32 @@ fn render_compact_row(ui: &mut Ui, summaries: &[StateSummary], time: f64, stale_
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = COMPACT_GROUP_SPACING;
         for summary in summaries {
-            let (state_color, _label) = match &summary.state {
-                ClaudeState::Working => (Color32::from_rgb(80, 200, 80), "Running"),
-                ClaudeState::WaitingForApproval => (Color32::from_rgb(220, 180, 0), "Approval"),
-                ClaudeState::Idle => (Color32::from_gray(160), "Idle"),
-            };
+            let (state_color, _label) = state_color_and_label(&summary.state);
 
             let pulse = matches!(summary.state, ClaudeState::WaitingForApproval)
                 || (stale_idle && matches!(summary.state, ClaudeState::Idle));
             let stroke_width = calc_stroke_width(time, pulse);
 
-            // Mini robot art (same as render_session_row)
-            ui.allocate_ui(egui::Vec2::new(40.0, ROW_HEIGHT), |ui| {
-                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
-                    ui.spacing_mut().item_spacing.y = 0.0;
-                    let o = Color32::from_rgb(210, 110, 30);
-                    let lines: [(&str, Color32); 4] = [
-                        ("▟█▙", state_color),
-                        ("▐▛███▜▌", o),
-                        ("▝▜█████▛▘", o),
-                        ("▘▘ ▝▝", o),
-                    ];
-                    for (text, color) in lines {
-                        ui.label(RichText::new(text).size(5.0).color(color).monospace());
-                    }
-                });
-            });
-
-            // Speech bubble with count
-            ui.add_space(2.0);
+            let body_color = Color32::from_rgb(210, 110, 30);
             let bubble_fill = Color32::from_rgba_unmultiplied(30, 30, 45, 220);
-            let inner = egui::Frame::none()
-                .fill(bubble_fill)
-                .stroke(egui::Stroke::new(stroke_width, state_color))
-                .rounding(egui::Rounding::same(5.0))
-                .inner_margin(egui::Margin::symmetric(6.0, 2.0))
-                .show(ui, |ui: &mut Ui| {
+
+            render_robot_art(ui, state_color, body_color);
+
+            ui.add_space(2.0);
+
+            render_speech_bubble_with_tail(
+                ui,
+                stroke_width,
+                state_color,
+                bubble_fill,
+                None,
+                |ui| {
                     ui.label(
                         RichText::new(format!("{}", summary.count))
                             .color(state_color)
                             .size(11.0),
                     );
-                });
-
-            // Draw tail triangle pointing left toward the robot
-            let rect = inner.response.rect;
-            let mid_y = rect.center().y;
-            let tail_tip = egui::pos2(rect.left() - 4.0, mid_y);
-            let tail_top = egui::pos2(rect.left(), mid_y - 4.0);
-            let tail_bot = egui::pos2(rect.left(), mid_y + 4.0);
-            let painter = ui.painter();
-            painter.add(egui::Shape::convex_polygon(
-                vec![tail_tip, tail_top, tail_bot],
-                bubble_fill,
-                egui::Stroke::NONE,
-            ));
-            painter.line_segment(
-                [tail_tip, tail_top],
-                egui::Stroke::new(stroke_width, state_color),
-            );
-            painter.line_segment(
-                [tail_tip, tail_bot],
-                egui::Stroke::new(stroke_width, state_color),
+                },
             );
         }
     });
