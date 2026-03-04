@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-03-05
+
+### Added
+
+- CJK font fallback for Japanese/Chinese/Korean text rendering in egui overlay
+  - Uses `font-kit` to search system CJK fonts (Noto Sans CJK JP, Hiragino Sans, Yu Gothic, etc.)
+  - Adds found font as Proportional family fallback so CJK titles display correctly
+  - Graceful degradation: overlay works normally if no CJK font is found
+
 ## [0.7.0] - 2026-03-05
 
 ### Added
@@ -131,7 +140,8 @@
 - Project renamed from `ccmonitor` to `claudeye`
 - Overlay window height adjusts dynamically per session row count
 
-[Unreleased]: https://github.com/maedana/claudeye/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/maedana/claudeye/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/maedana/claudeye/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/maedana/claudeye/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/maedana/claudeye/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/maedana/claudeye/compare/v0.5.1...v0.5.2
