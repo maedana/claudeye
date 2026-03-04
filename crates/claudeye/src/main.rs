@@ -1,3 +1,4 @@
+mod crmux_client;
 mod cursor;
 mod picker;
 
@@ -21,6 +22,10 @@ struct Args {
     /// Move overlay to screen center when any session stays in Approval/Idle for 5-15 seconds
     #[arg(long)]
     alert_on_stale: bool,
+
+    /// Use crmux socket for session data instead of direct tmux polling
+    #[arg(long)]
+    crmux: bool,
 
     #[command(subcommand)]
     command: Option<Commands>,
@@ -89,14 +94,141 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     match args.command {
         Some(Commands::Picker) => picker::run_picker()?,
-        None => run_gui(args.compact, args.position, args.alert_on_stale)?,
+        None => run_gui(args.compact, args.position, args.alert_on_stale, args.crmux)?,
     }
     Ok(())
 }
 
-fn run_gui(compact: bool, position: Position, alert_on_stale: bool) -> eframe::Result<()> {
+/// Data from crmux socket for a single session.
+#[derive(Clone, Debug, serde::Deserialize)]
+pub struct CrmuxSession {
+    pub pane_id: String,
+    pub pid: u32,
+    pub project_name: String,
+    pub state: String,
+    pub elapsed_secs: u64,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub context_percent: Option<u32>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub git_branch: Option<String>,
+}
+
+/// State shared between the crmux polling thread and the GUI.
+#[derive(Clone, Debug, Default)]
+pub struct CrmuxState {
+    pub sessions: Vec<CrmuxSession>,
+    pub visible: bool,
+}
+
+/// Convert a crmux state string to ClaudeState.
+fn parse_crmux_state(s: &str) -> ClaudeState {
+    match s {
+        "Working" => ClaudeState::Working,
+        "WaitingForApproval" | "Approval" => ClaudeState::WaitingForApproval,
+        _ => ClaudeState::Idle,
+    }
+}
+
+/// Format a crmux session label for rich display.
+/// Example: "myproject (main) Opus 23% [Running] 45s"
+pub fn format_crmux_label(session: &CrmuxSession, state_label: &str) -> String {
+    let mut parts = Vec::new();
+
+    // project_name (git_branch)
+    if let Some(ref branch) = session.git_branch {
+        parts.push(format!("{} ({})", session.project_name, branch));
+    } else {
+        parts.push(session.project_name.clone());
+    }
+
+    // model
+    if let Some(ref model) = session.model {
+        parts.push(model.clone());
+    }
+
+    // context_percent
+    if let Some(pct) = session.context_percent {
+        parts.push(format!("{}%", pct));
+    }
+
+    // [state] elapsed
+    parts.push(format!("[{}] {}s", state_label, session.elapsed_secs));
+
+    parts.join("  ")
+}
+
+/// Convert CrmuxSession list to ClaudeSession list for rendering.
+fn crmux_to_claude_sessions(crmux_sessions: &[CrmuxSession]) -> Vec<ClaudeSession> {
+    use tmux_claude_state::tmux::PaneInfo;
+    crmux_sessions
+        .iter()
+        .map(|cs| {
+            let state = parse_crmux_state(&cs.state);
+            ClaudeSession {
+                pane: PaneInfo {
+                    id: cs.pane_id.clone(),
+                    pid: cs.pid,
+                    cwd: String::new(),
+                    project_name: cs.project_name.clone(),
+                },
+                state,
+                state_changed_at: std::time::Instant::now()
+                    - std::time::Duration::from_secs(cs.elapsed_secs),
+            }
+        })
+        .collect()
+}
+
+/// Start a background thread that polls crmux socket every 2 seconds.
+fn start_crmux_polling(crmux_state: Arc<Mutex<CrmuxState>>) {
+    std::thread::spawn(move || loop {
+        match crmux_client::fetch_sessions() {
+            Ok(result) => {
+                let visible = result
+                    .get("visible")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                let sessions: Vec<CrmuxSession> = result
+                    .get("sessions")
+                    .and_then(|v| serde_json::from_value(v.clone()).ok())
+                    .unwrap_or_default();
+
+                if let Ok(mut state) = crmux_state.lock() {
+                    state.sessions = sessions;
+                    state.visible = visible;
+                }
+            }
+            Err(_) => {
+                if let Ok(mut state) = crmux_state.lock() {
+                    state.sessions.clear();
+                    state.visible = false;
+                }
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_secs(REPAINT_INTERVAL_SECS));
+    });
+}
+
+fn run_gui(
+    compact: bool,
+    position: Position,
+    alert_on_stale: bool,
+    crmux: bool,
+) -> eframe::Result<()> {
     let state: Arc<Mutex<MonitorState>> = Arc::new(Mutex::new(MonitorState::default()));
-    start_polling(Arc::clone(&state));
+    let crmux_state: Arc<Mutex<CrmuxState>> = Arc::new(Mutex::new(CrmuxState::default()));
+
+    if crmux {
+        start_crmux_polling(Arc::clone(&crmux_state));
+    } else {
+        start_polling(Arc::clone(&state));
+    }
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -104,7 +236,8 @@ fn run_gui(compact: bool, position: Position, alert_on_stale: bool) -> eframe::R
             .with_always_on_top()
             .with_mouse_passthrough(true)
             .with_inner_size([MIN_WINDOW_WIDTH, WINDOW_EMPTY_HEIGHT])
-            .with_transparent(true),
+            .with_transparent(true)
+            .with_active(false),
         ..Default::default()
     };
 
@@ -114,6 +247,8 @@ fn run_gui(compact: bool, position: Position, alert_on_stale: bool) -> eframe::R
         Box::new(|_cc| {
             Ok(Box::new(CcMonitorApp {
                 state,
+                crmux_state,
+                crmux,
                 compact,
                 position,
                 alert_on_stale,
@@ -125,6 +260,8 @@ fn run_gui(compact: bool, position: Position, alert_on_stale: bool) -> eframe::R
 
 struct CcMonitorApp {
     state: Arc<Mutex<MonitorState>>,
+    crmux_state: Arc<Mutex<CrmuxState>>,
+    crmux: bool,
     compact: bool,
     position: Position,
     alert_on_stale: bool,
@@ -146,9 +283,25 @@ impl eframe::App for CcMonitorApp {
         ));
         ctx.send_viewport_cmd(egui::ViewportCommand::MousePassthrough(true));
 
-        let (sessions, quiet) = match self.state.lock() {
-            Ok(guard) => (guard.sessions.clone(), guard.any_claude_focused),
-            Err(_) => return, // poisoned mutex: polling thread panicked
+        let (sessions, quiet, crmux_sessions) = if self.crmux {
+            match self.crmux_state.lock() {
+                Ok(guard) => {
+                    if !guard.visible {
+                        ctx.request_repaint_after(std::time::Duration::from_secs(
+                            REPAINT_INTERVAL_SECS,
+                        ));
+                        return;
+                    }
+                    let cs = guard.sessions.clone();
+                    (crmux_to_claude_sessions(&cs), false, Some(cs))
+                }
+                Err(_) => return,
+            }
+        } else {
+            match self.state.lock() {
+                Ok(guard) => (guard.sessions.clone(), guard.any_claude_focused, None),
+                Err(_) => return, // poisoned mutex: polling thread panicked
+            }
         };
 
         let needs_fast_repaint = !quiet
@@ -232,6 +385,12 @@ impl eframe::App for CcMonitorApp {
 
             let window_width = if display_sessions.is_empty() {
                 MIN_WINDOW_WIDTH
+            } else if let Some(ref cs) = crmux_sessions {
+                let max_text = cs
+                    .iter()
+                    .map(|s| measure_crmux_text_width(ctx, s))
+                    .fold(0.0_f32, f32::max);
+                (max_text + ROW_HORIZONTAL_OVERHEAD).max(MIN_WINDOW_WIDTH)
             } else {
                 let max_text = display_sessions
                     .iter()
@@ -296,6 +455,16 @@ impl eframe::App for CcMonitorApp {
                                 .color(apply_opacity(Color32::from_gray(120), hover_opacity))
                                 .size(12.0),
                         );
+                    } else if let Some(ref cs) = crmux_sessions {
+                        for (session, crmux_s) in display_sessions.iter().zip(cs.iter()) {
+                            render_crmux_session_row(
+                                ui,
+                                session,
+                                crmux_s,
+                                time,
+                                hover_opacity,
+                            );
+                        }
                     } else {
                         for session in &display_sessions {
                             render_session_row(ui, session, time, quiet, hover_opacity);
@@ -316,6 +485,16 @@ fn measure_session_text_width(ctx: &egui::Context, session: &ClaudeSession) -> f
         "{}  {}  [{}] {}",
         session.pane.id, session.pane.project_name, "Approval", "9999s"
     );
+    let font_id = egui::FontId::proportional(11.0);
+    ctx.fonts(|fonts| {
+        let galley = fonts.layout_no_wrap(text, font_id, Color32::WHITE);
+        galley.size().x
+    })
+}
+
+/// Measure the rendered text width of a crmux session row.
+fn measure_crmux_text_width(ctx: &egui::Context, session: &CrmuxSession) -> f32 {
+    let text = format_crmux_label(session, "Approval");
     let font_id = egui::FontId::proportional(11.0);
     ctx.fonts(|fonts| {
         let galley = fonts.layout_no_wrap(text, font_id, Color32::WHITE);
@@ -348,6 +527,85 @@ fn calc_stroke_width(time: f64, pulse: bool) -> f32 {
     } else {
         1.0
     }
+}
+
+fn render_crmux_session_row(
+    ui: &mut Ui,
+    session: &ClaudeSession,
+    crmux_session: &CrmuxSession,
+    time: f64,
+    hover_opacity: f32,
+) {
+    let (state_color, label) = match &session.state {
+        ClaudeState::Working => (Color32::from_rgb(80, 200, 80), "Running"),
+        ClaudeState::WaitingForApproval => (Color32::from_rgb(220, 180, 0), "Approval"),
+        ClaudeState::Idle => (Color32::from_gray(160), "Idle"),
+    };
+
+    let state_color = apply_opacity(state_color, hover_opacity);
+    let pulse = should_pulse(&session.state, crmux_session.elapsed_secs, false);
+    let stroke_width = calc_stroke_width(time, pulse);
+
+    let display_text = format_crmux_label(crmux_session, label);
+
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        ui.allocate_ui(egui::Vec2::new(40.0, ROW_HEIGHT), |ui| {
+            ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.y = 0.0;
+                let o = apply_opacity(Color32::from_rgb(210, 110, 30), hover_opacity);
+                let lines: [(&str, Color32); 4] = [
+                    ("▟█▙", state_color),
+                    ("▐▛███▜▌", o),
+                    ("▝▜█████▛▘", o),
+                    ("▘▘ ▝▝", o),
+                ];
+                for (text, color) in lines {
+                    ui.label(RichText::new(text).size(5.0).color(color).monospace());
+                }
+            });
+        });
+
+        ui.add_space(2.0);
+
+        let max_label_width = (ui.available_width() - 14.0).max(0.0);
+
+        let bubble_fill =
+            apply_opacity(Color32::from_rgba_unmultiplied(30, 30, 45, 220), hover_opacity);
+        let inner = egui::Frame::none()
+            .fill(bubble_fill)
+            .stroke(egui::Stroke::new(stroke_width, state_color))
+            .rounding(egui::Rounding::same(5.0))
+            .inner_margin(egui::Margin::symmetric(6.0, 2.0))
+            .show(ui, |ui: &mut Ui| {
+                ui.set_max_width(max_label_width);
+                ui.label(
+                    RichText::new(display_text)
+                        .color(state_color)
+                        .size(11.0),
+                );
+            });
+
+        let rect = inner.response.rect;
+        let mid_y = rect.center().y;
+        let tail_tip = egui::pos2(rect.left() - 4.0, mid_y);
+        let tail_top = egui::pos2(rect.left(), mid_y - 4.0);
+        let tail_bot = egui::pos2(rect.left(), mid_y + 4.0);
+        let painter = ui.painter();
+        painter.add(egui::Shape::convex_polygon(
+            vec![tail_tip, tail_top, tail_bot],
+            bubble_fill,
+            egui::Stroke::NONE,
+        ));
+        painter.line_segment(
+            [tail_tip, tail_top],
+            egui::Stroke::new(stroke_width, state_color),
+        );
+        painter.line_segment(
+            [tail_tip, tail_bot],
+            egui::Stroke::new(stroke_width, state_color),
+        );
+    });
 }
 
 fn render_session_row(
@@ -830,5 +1088,122 @@ mod tests {
         let c = Color32::from_rgb(100, 150, 200);
         let result = apply_opacity(c, 0.0);
         assert_eq!(result, Color32::from_rgba_unmultiplied(100, 150, 200, 0));
+    }
+
+    // --- parse_crmux_state ---
+
+    #[test]
+    fn parse_crmux_state_working() {
+        assert_eq!(parse_crmux_state("Working"), ClaudeState::Working);
+    }
+
+    #[test]
+    fn parse_crmux_state_waiting_for_approval() {
+        assert_eq!(
+            parse_crmux_state("WaitingForApproval"),
+            ClaudeState::WaitingForApproval
+        );
+    }
+
+    #[test]
+    fn parse_crmux_state_approval_alias() {
+        assert_eq!(
+            parse_crmux_state("Approval"),
+            ClaudeState::WaitingForApproval
+        );
+    }
+
+    #[test]
+    fn parse_crmux_state_idle() {
+        assert_eq!(parse_crmux_state("Idle"), ClaudeState::Idle);
+    }
+
+    #[test]
+    fn parse_crmux_state_unknown_defaults_to_idle() {
+        assert_eq!(parse_crmux_state("Unknown"), ClaudeState::Idle);
+    }
+
+    // --- crmux_to_claude_sessions ---
+
+    #[test]
+    fn crmux_to_claude_sessions_empty() {
+        let result = crmux_to_claude_sessions(&[]);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn crmux_to_claude_sessions_converts_fields() {
+        let crmux = CrmuxSession {
+            pane_id: "%5".to_string(),
+            pid: 123,
+            project_name: "myproject".to_string(),
+            state: "Working".to_string(),
+            elapsed_secs: 30,
+            model: Some("Opus".to_string()),
+            context_percent: Some(50),
+            title: Some("doing stuff".to_string()),
+            session_id: Some("sess-1".to_string()),
+            git_branch: Some("main".to_string()),
+        };
+        let result = crmux_to_claude_sessions(&[crmux]);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].pane.id, "%5");
+        assert_eq!(result[0].pane.pid, 123);
+        assert_eq!(result[0].pane.project_name, "myproject");
+        assert_eq!(result[0].state, ClaudeState::Working);
+        // elapsed should be approximately 30 seconds
+        let elapsed = result[0].state_changed_at.elapsed().as_secs();
+        assert!(elapsed >= 29 && elapsed <= 32);
+    }
+
+    // --- format_crmux_label ---
+
+    fn make_crmux_session(
+        project: &str,
+        branch: Option<&str>,
+        model: Option<&str>,
+        context: Option<u32>,
+        elapsed: u64,
+    ) -> CrmuxSession {
+        CrmuxSession {
+            pane_id: "%1".to_string(),
+            pid: 1,
+            project_name: project.to_string(),
+            state: "Working".to_string(),
+            elapsed_secs: elapsed,
+            model: model.map(|s| s.to_string()),
+            context_percent: context,
+            title: None,
+            session_id: None,
+            git_branch: branch.map(|s| s.to_string()),
+        }
+    }
+
+    #[test]
+    fn format_crmux_label_full_info() {
+        let s = make_crmux_session("crmux", Some("main"), Some("Opus"), Some(23), 45);
+        let label = format_crmux_label(&s, "Running");
+        assert_eq!(label, "crmux (main)  Opus  23%  [Running] 45s");
+    }
+
+    #[test]
+    fn format_crmux_label_no_branch() {
+        let s = make_crmux_session("myproj", None, Some("Sonnet"), Some(10), 5);
+        let label = format_crmux_label(&s, "Idle");
+        assert_eq!(label, "myproj  Sonnet  10%  [Idle] 5s");
+    }
+
+    #[test]
+    fn format_crmux_label_no_model_no_context() {
+        let s = make_crmux_session("proj", Some("dev"), None, None, 100);
+        let label = format_crmux_label(&s, "Approval");
+        assert_eq!(label, "proj (dev)  [Approval] 100s");
+    }
+
+    #[test]
+    fn format_crmux_label_minimal() {
+        let s = make_crmux_session("proj", None, None, None, 0);
+        let label = format_crmux_label(&s, "Running");
+        assert_eq!(label, "proj  [Running] 0s");
     }
 }
