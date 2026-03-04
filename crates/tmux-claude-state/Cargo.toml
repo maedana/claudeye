@@ -1,6 +1,6 @@
 [package]
 name = "tmux-claude-state"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 description = "Claude session state detection and tmux helpers"
 license = "MIT"
