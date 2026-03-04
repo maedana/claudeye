@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-03-05
+
+### Added
+
+- `--crmux` mode for receiving session data from crmux via Unix domain socket (msgpack-rpc)
+  - Displays rich session info: project name, git branch, title, model, context percentage, elapsed time
+- Title field displayed in crmux session labels
+
+### Changed
+
+- Cache X11 display connection to avoid opening/closing on every frame during hover animation
+- Move `set_visuals` to app initialization instead of calling every frame
+- Extract shared rendering helpers (`render_robot_art`, `render_speech_bubble_with_tail`) to eliminate duplicated code
+- Add `ClaudeState::display_label()` method to unify state label mapping across overlay and picker
+- Extract `ROBOT_BODY_COLOR` constant and `bubble_fill_color()` helper to eliminate repeated color literals
+
 ## [0.6.0] - 2026-03-03
 
 ### Added
@@ -115,7 +131,8 @@
 - Project renamed from `ccmonitor` to `claudeye`
 - Overlay window height adjusts dynamically per session row count
 
-[Unreleased]: https://github.com/maedana/claudeye/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/maedana/claudeye/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/maedana/claudeye/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/maedana/claudeye/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/maedana/claudeye/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/maedana/claudeye/compare/v0.4.0...v0.5.1
