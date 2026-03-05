@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-03-05
+
+### Added
+
+- GitHub Actions release workflow for automated binary builds on tag push
+- `install.sh` for curl-based one-liner installation
+- Release profile optimizations (LTO, strip, opt-level=s)
+- Quick install section in README
+
 ## [0.7.2] - 2026-03-05
 
 ### Added
@@ -150,7 +159,8 @@
 - Project renamed from `ccmonitor` to `claudeye`
 - Overlay window height adjusts dynamically per session row count
 
-[Unreleased]: https://github.com/maedana/claudeye/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/maedana/claudeye/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/maedana/claudeye/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/maedana/claudeye/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/maedana/claudeye/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/maedana/claudeye/compare/v0.6.0...v0.7.0
