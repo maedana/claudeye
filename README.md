@@ -18,13 +18,21 @@ Each session is shown as a mini Clawd (the Claude robot mascot) with a color-cod
 
 - **tmux** — must be installed and running. claudeye uses `tmux list-panes` and `tmux capture-pane` to discover and read Claude sessions.
 - **Claude Code** (`claude` CLI) — sessions must be running inside tmux panes. claudeye identifies panes where the current command is `claude`.
-- **Rust toolchain** — install via [rustup](https://rustup.rs/)
+- **Rust toolchain** — install via [rustup](https://rustup.rs/) (only required when building from source)
 - **macOS** or **Linux with X11** — on Linux, tested on X11; Wayland is supported but mouse hover transparency is unavailable. Standard X11 libraries are required (typically pre-installed).
 
 ## Installation
 
+### Quick install
+
 ```sh
-cargo install claudeye
+curl -sSL https://raw.githubusercontent.com/maedana/claudeye/main/install.sh | sh
+```
+
+### From crates.io
+
+```sh
+cargo install claudeye --locked
 ```
 
 ## Usage
