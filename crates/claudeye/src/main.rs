@@ -182,9 +182,18 @@ pub fn format_crmux_label(session: &CrmuxSession, state_label: &str) -> String {
         parts.push(session.project_name.clone());
     }
 
-    // title
+    // title (strip newlines, truncate to 20 chars)
     if let Some(ref title) = session.title {
-        parts.push(title.clone());
+        let sanitized: String = title.chars().map(|c| if c == '\n' { ' ' } else { c }).collect();
+        let truncated = if sanitized.chars().count() > 20 {
+            let s: String = sanitized.chars().take(20).collect();
+            format!("{s}…")
+        } else {
+            sanitized
+        };
+        if !truncated.is_empty() {
+            parts.push(truncated);
+        }
     }
 
     // model
@@ -1243,7 +1252,7 @@ mod tests {
         let label = format_crmux_label(&s, "Running");
         assert_eq!(
             label,
-            "crmux (main)  implementing feature X  Opus  23%  [Running] 45s"
+            "crmux (main)  implementing feature…  Opus  23%  [Running] 45s"
         );
     }
 
@@ -1252,6 +1261,31 @@ mod tests {
         let s = make_crmux_session_with_title("proj", None, Some("fix bug"), None, None, 10);
         let label = format_crmux_label(&s, "Idle");
         assert_eq!(label, "proj  fix bug  [Idle] 10s");
+    }
+
+    #[test]
+    fn format_crmux_label_title_newlines_replaced() {
+        let s = make_crmux_session_with_title("proj", None, Some("line1\nline2\nline3"), None, None, 5);
+        let label = format_crmux_label(&s, "Running");
+        assert_eq!(label, "proj  line1 line2 line3  [Running] 5s");
+    }
+
+    #[test]
+    fn format_crmux_label_title_truncated_at_40_chars() {
+        let long_title = "abcdefghijklmnopqrstuvwxyz";
+        assert!(long_title.chars().count() > 20);
+        let s = make_crmux_session_with_title("proj", None, Some(long_title), None, None, 5);
+        let label = format_crmux_label(&s, "Running");
+        // first 20 chars + ellipsis
+        assert!(label.contains("abcdefghijklmnopqrst…"));
+        assert!(!label.contains("uvwxyz"));
+    }
+
+    #[test]
+    fn format_crmux_label_empty_title_skipped() {
+        let s = make_crmux_session_with_title("proj", None, Some(""), None, None, 5);
+        let label = format_crmux_label(&s, "Running");
+        assert_eq!(label, "proj  [Running] 5s");
     }
 
     #[test]
