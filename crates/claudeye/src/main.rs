@@ -161,6 +161,29 @@ pub struct CrmuxState {
     pub visible: bool,
 }
 
+/// Format elapsed seconds as a human-readable duration (e.g. "45s", "2m", "1h 5m").
+fn format_elapsed(secs: u64) -> String {
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        let m = secs / 60;
+        let s = secs % 60;
+        if s == 0 {
+            format!("{m}m")
+        } else {
+            format!("{m}m {s}s")
+        }
+    } else {
+        let h = secs / 3600;
+        let m = (secs % 3600) / 60;
+        if m == 0 {
+            format!("{h}h")
+        } else {
+            format!("{h}h {m}m")
+        }
+    }
+}
+
 /// Convert a crmux state string to ClaudeState.
 fn parse_crmux_state(s: &str) -> ClaudeState {
     match s {
@@ -207,7 +230,7 @@ pub fn format_crmux_label(session: &CrmuxSession, state_label: &str) -> String {
     }
 
     // [state] elapsed
-    parts.push(format!("[{}] {}s", state_label, session.elapsed_secs));
+    parts.push(format!("[{}] {}", state_label, format_elapsed(session.elapsed_secs)));
 
     parts.join("  ")
 }
@@ -552,7 +575,7 @@ fn measure_text_width(ctx: &egui::Context, text: String) -> f32 {
 fn measure_session_text_width(ctx: &egui::Context, session: &ClaudeSession) -> f32 {
     let text = format!(
         "{}  {}  [{}] {}",
-        session.pane.id, session.pane.project_name, "Approval", "9999s"
+        session.pane.id, session.pane.project_name, "Approval", "99h 59m"
     );
     measure_text_width(ctx, text)
 }
@@ -739,8 +762,8 @@ fn render_session_row(
             |ui| {
                 ui.label(
                     RichText::new(format!(
-                        "{}  {}  [{}] {}s",
-                        session.pane.id, session.pane.project_name, label, elapsed
+                        "{}  {}  [{}] {}",
+                        session.pane.id, session.pane.project_name, label, format_elapsed(elapsed)
                     ))
                     .color(state_color)
                     .size(11.0),
@@ -1111,6 +1134,30 @@ mod tests {
         assert_eq!(result, Color32::from_rgba_unmultiplied(100, 150, 200, 0));
     }
 
+    // --- format_elapsed ---
+
+    #[test]
+    fn format_elapsed_seconds() {
+        assert_eq!(format_elapsed(0), "0s");
+        assert_eq!(format_elapsed(45), "45s");
+        assert_eq!(format_elapsed(59), "59s");
+    }
+
+    #[test]
+    fn format_elapsed_minutes() {
+        assert_eq!(format_elapsed(60), "1m");
+        assert_eq!(format_elapsed(90), "1m 30s");
+        assert_eq!(format_elapsed(3599), "59m 59s");
+    }
+
+    #[test]
+    fn format_elapsed_hours() {
+        assert_eq!(format_elapsed(3600), "1h");
+        assert_eq!(format_elapsed(3660), "1h 1m");
+        assert_eq!(format_elapsed(7200), "2h");
+        assert_eq!(format_elapsed(7320), "2h 2m");
+    }
+
     // --- parse_crmux_state ---
 
     #[test]
@@ -1229,7 +1276,7 @@ mod tests {
     fn format_crmux_label_no_model_no_context() {
         let s = make_crmux_session("proj", Some("dev"), None, None, 100);
         let label = format_crmux_label(&s, "Approval");
-        assert_eq!(label, "proj (dev)  [Approval] 100s");
+        assert_eq!(label, "proj (dev)  [Approval] 1m 40s");
     }
 
     #[test]
@@ -1301,7 +1348,7 @@ mod tests {
         let label = format_crmux_label(&s, "Running");
         assert_eq!(
             label,
-            "crmux (main)  日本語タイトルのテスト  Opus  42%  [Running] 60s"
+            "crmux (main)  日本語タイトルのテスト  Opus  42%  [Running] 1m"
         );
     }
 }
