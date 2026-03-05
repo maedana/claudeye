@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-03-05
+
+### Added
+
+- Human-readable elapsed time display (e.g. `45s`, `2m 30s`, `1h 5m`) instead of raw seconds
+
+### Fixed
+
+- Sanitize crmux session titles: strip newlines and truncate to 20 characters to prevent row overflow
+
 ## [0.7.1] - 2026-03-05
 
 ### Added
@@ -10,11 +20,6 @@
   - Uses `font-kit` to search system CJK fonts (Noto Sans CJK JP, Hiragino Sans, Yu Gothic, etc.)
   - Adds found font as Proportional family fallback so CJK titles display correctly
   - Graceful degradation: overlay works normally if no CJK font is found
-- Human-readable elapsed time display (e.g. `45s`, `2m 30s`, `1h 5m`) instead of raw seconds
-
-### Fixed
-
-- Sanitize crmux session titles: strip newlines and truncate to 20 characters to prevent row overflow
 
 ## [0.7.0] - 2026-03-05
 
@@ -145,7 +150,8 @@
 - Project renamed from `ccmonitor` to `claudeye`
 - Overlay window height adjusts dynamically per session row count
 
-[Unreleased]: https://github.com/maedana/claudeye/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/maedana/claudeye/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/maedana/claudeye/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/maedana/claudeye/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/maedana/claudeye/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/maedana/claudeye/compare/v0.5.2...v0.6.0
