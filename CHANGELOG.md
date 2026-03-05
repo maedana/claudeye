@@ -10,6 +10,11 @@
   - Uses `font-kit` to search system CJK fonts (Noto Sans CJK JP, Hiragino Sans, Yu Gothic, etc.)
   - Adds found font as Proportional family fallback so CJK titles display correctly
   - Graceful degradation: overlay works normally if no CJK font is found
+- Human-readable elapsed time display (e.g. `45s`, `2m 30s`, `1h 5m`) instead of raw seconds
+
+### Fixed
+
+- Sanitize crmux session titles: strip newlines and truncate to 20 characters to prevent row overflow
 
 ## [0.7.0] - 2026-03-05
 
