@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-07
+
+### Added
+
+- `PermissionMode` enum and `detect_permission_mode()` for detecting Claude Code permission modes
+  - `AskBeforeEdits` (default), `EditAutomatically`, `PlanMode`
+  - Scans only the tmux status bar area (below the last separator) to avoid false positives from conversation history
+  - `display_label()` returns human-readable names (`"Ask"`, `"Auto Edit"`, `"Plan"`)
+
+## [0.1.4] - 2026-03-05
+
+### Added
+
+- Detection patterns for additional Claude Code running states (vim mode, file changes status, esc to interrupt variants)
+
 ## [0.1.3] - 2026-03-03
 
 ### Added
@@ -32,7 +47,9 @@
 - Tmux helpers: `list_panes`, `capture_pane`, `switch_client`
 - Version cache for detecting claude binary names in tmux pane commands
 
-[Unreleased]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.3...HEAD
+[Unreleased]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.2.0...HEAD
+[0.2.0]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.4...tmux-claude-state-v0.2.0
+[0.1.4]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.3...tmux-claude-state-v0.1.4
 [0.1.3]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.2...tmux-claude-state-v0.1.3
 [0.1.2]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.1...tmux-claude-state-v0.1.2
 [0.1.1]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.0...tmux-claude-state-v0.1.1
