@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- `permission_mode` integration: overlay and picker now display each session's permission mode (Ask / Auto Edit / Plan)
+  - Uses `detect_permission_mode()` from tmux-claude-state 0.3.0
+
 ## [0.8.0] - 2026-03-05
 
 ### Added

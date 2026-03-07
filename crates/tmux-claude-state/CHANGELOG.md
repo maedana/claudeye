@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-07
+
+### Added
+
+- `permission_mode` field on `ClaudeSession` to expose detected permission mode during polling
+
 ## [0.2.0] - 2026-03-07
 
 ### Added
@@ -47,7 +53,8 @@
 - Tmux helpers: `list_panes`, `capture_pane`, `switch_client`
 - Version cache for detecting claude binary names in tmux pane commands
 
-[Unreleased]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.2.0...HEAD
+[Unreleased]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.3.0...HEAD
+[0.3.0]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.2.0...tmux-claude-state-v0.3.0
 [0.2.0]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.4...tmux-claude-state-v0.2.0
 [0.1.4]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.3...tmux-claude-state-v0.1.4
 [0.1.3]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.1.2...tmux-claude-state-v0.1.3
