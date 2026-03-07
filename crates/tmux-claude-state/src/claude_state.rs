@@ -47,7 +47,10 @@ impl PermissionMode {
 
 /// Detect the permission mode from captured tmux pane content.
 ///
-/// Scans only lines below the last separator (status bar area) for mode indicators.
+/// Scans only lines below the last separator (status bar area) for mode indicators:
+/// - `"accept edits on"` → [`PermissionMode::EditAutomatically`]
+/// - `"plan mode on"` → [`PermissionMode::PlanMode`]
+/// - Otherwise → [`PermissionMode::AskBeforeEdits`] (default, no indicator shown)
 pub fn detect_permission_mode(content: &str) -> PermissionMode {
     // Collect lines below the last separator — these form the status bar area.
     for line in content.split('\n').rev() {

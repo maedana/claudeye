@@ -6,6 +6,10 @@
 //! - **State detection** — parse captured tmux pane content and classify it as
 //!   [`ClaudeState::Working`], [`ClaudeState::WaitingForApproval`], or
 //!   [`ClaudeState::Idle`] (see [`claude_state::detect_state`]).
+//! - **Permission mode detection** — detect the active permission mode
+//!   ([`PermissionMode::AskBeforeEdits`], [`PermissionMode::EditAutomatically`],
+//!   or [`PermissionMode::PlanMode`]) from the tmux status bar
+//!   (see [`claude_state::detect_permission_mode`]).
 //! - **Tmux interaction** — list Claude panes, capture their content (with or
 //!   without ANSI escape sequences), and switch the client to a pane
 //!   (see the [`tmux`] module).
