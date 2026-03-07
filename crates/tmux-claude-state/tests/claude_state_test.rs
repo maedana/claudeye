@@ -1,4 +1,4 @@
-use tmux_claude_state::claude_state::{ClaudeState, detect_state};
+use tmux_claude_state::claude_state::{ClaudeState, PermissionMode, detect_permission_mode, detect_state};
 
 // Ported from tcmux status_claude_test.go
 
@@ -400,4 +400,66 @@ fn idle_with_vim_mode_and_stale_waiting_pattern_in_history() {
 ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n\
   [Opus 4.6] Context: 0%";
     assert_eq!(detect_state(content), ClaudeState::Idle);
+}
+
+// PermissionMode detection tests
+
+#[test]
+fn permission_mode_edit_automatically() {
+    let content = "Some output\n\
+───────────────────────────────────────\n\
+❯\n\
+───────────────────────────────────────\n\
+  ⏵⏵ accept edits on (shift+tab to cycle)";
+    assert_eq!(
+        detect_permission_mode(content),
+        PermissionMode::EditAutomatically
+    );
+}
+
+#[test]
+fn permission_mode_plan_mode() {
+    let content = "Some output\n\
+───────────────────────────────────────\n\
+❯\n\
+───────────────────────────────────────\n\
+  ⏸ plan mode on (shift+tab to cycle)";
+    assert_eq!(detect_permission_mode(content), PermissionMode::PlanMode);
+}
+
+#[test]
+fn permission_mode_ask_before_edits_default() {
+    let content = "Some output\n\
+───────────────────────────────────────\n\
+❯\n\
+───────────────────────────────────────";
+    assert_eq!(
+        detect_permission_mode(content),
+        PermissionMode::AskBeforeEdits
+    );
+}
+
+#[test]
+fn permission_mode_not_triggered_by_conversation_history() {
+    // "accept edits on" in conversation history (not status bar) should not trigger detection
+    let content = "⏺ The status bar shows ⏵⏵ accept edits on when edit mode is active.\n\
+\n\
+✻ Cooked for 43s\n\
+───────────────────────────────────────\n\
+❯ \n\
+───────────────────────────────────────";
+    assert_eq!(
+        detect_permission_mode(content),
+        PermissionMode::AskBeforeEdits
+    );
+}
+
+#[test]
+fn permission_mode_display_labels() {
+    assert_eq!(PermissionMode::AskBeforeEdits.display_label(), "Ask");
+    assert_eq!(
+        PermissionMode::EditAutomatically.display_label(),
+        "Auto Edit"
+    );
+    assert_eq!(PermissionMode::PlanMode.display_label(), "Plan");
 }

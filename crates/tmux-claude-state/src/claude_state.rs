@@ -23,6 +23,51 @@ impl ClaudeState {
     }
 }
 
+/// The permission mode of a Claude Code session.
+#[derive(Debug, PartialEq, Clone)]
+pub enum PermissionMode {
+    /// Default mode — Claude asks before making edits.
+    AskBeforeEdits,
+    /// Claude automatically applies edits without asking.
+    EditAutomatically,
+    /// Claude only plans but does not execute.
+    PlanMode,
+}
+
+impl PermissionMode {
+    /// Human-readable label for display.
+    pub fn display_label(&self) -> &'static str {
+        match self {
+            PermissionMode::AskBeforeEdits => "Ask",
+            PermissionMode::EditAutomatically => "Auto Edit",
+            PermissionMode::PlanMode => "Plan",
+        }
+    }
+}
+
+/// Detect the permission mode from captured tmux pane content.
+///
+/// Scans only lines below the last separator (status bar area) for mode indicators.
+pub fn detect_permission_mode(content: &str) -> PermissionMode {
+    // Collect lines below the last separator — these form the status bar area.
+    for line in content.split('\n').rev() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if is_separator_line(trimmed) || trimmed.starts_with('❯') {
+            break;
+        }
+        if trimmed.contains("accept edits on") {
+            return PermissionMode::EditAutomatically;
+        }
+        if trimmed.contains("plan mode on") {
+            return PermissionMode::PlanMode;
+        }
+    }
+    PermissionMode::AskBeforeEdits
+}
+
 const LAST_LINES_COUNT: usize = 30;
 
 /// Classify the state of a Claude Code session from captured tmux pane content.
