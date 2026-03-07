@@ -250,6 +250,7 @@ fn crmux_to_claude_sessions(crmux_sessions: &[CrmuxSession]) -> Vec<ClaudeSessio
                     project_name: cs.project_name.clone(),
                 },
                 state,
+                permission_mode: tmux_claude_state::claude_state::PermissionMode::AskBeforeEdits,
                 state_changed_at: std::time::Instant::now()
                     - std::time::Duration::from_secs(cs.elapsed_secs),
             }
@@ -927,6 +928,7 @@ mod tests {
                 project_name: "test-project".to_string(),
             },
             state,
+            permission_mode: tmux_claude_state::claude_state::PermissionMode::AskBeforeEdits,
             state_changed_at: Instant::now() - elapsed,
         }
     }

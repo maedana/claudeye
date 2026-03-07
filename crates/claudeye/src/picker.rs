@@ -58,9 +58,11 @@ pub fn run_picker() -> io::Result<()> {
         .map(|pane| {
             let content = tmux::capture_pane(&pane.id);
             let state = detect_state(&content);
+            let permission_mode = tmux_claude_state::claude_state::detect_permission_mode(&content);
             ClaudeSession {
                 pane,
                 state,
+                permission_mode,
                 state_changed_at: std::time::Instant::now(),
             }
         })
@@ -179,6 +181,7 @@ mod tests {
                 project_name: "test".to_string(),
             },
             state: ClaudeState::Idle,
+            permission_mode: tmux_claude_state::claude_state::PermissionMode::AskBeforeEdits,
             state_changed_at: std::time::Instant::now(),
         }
     }
