@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 
 const POLL_INTERVAL_SECS: u64 = 2;
 
-use crate::claude_state::{ClaudeState, detect_state};
+use crate::claude_state::{ClaudeState, PermissionMode, detect_permission_mode, detect_state};
 use crate::tmux::{self, PaneInfo};
 
 /// A single Claude Code session with its detected state.
@@ -14,6 +14,8 @@ pub struct ClaudeSession {
     pub pane: PaneInfo,
     /// The last detected state.
     pub state: ClaudeState,
+    /// The detected permission mode.
+    pub permission_mode: PermissionMode,
     /// When the current state was first observed.
     pub state_changed_at: Instant,
 }
@@ -44,6 +46,7 @@ pub fn start_polling(state: Arc<Mutex<MonitorState>>) {
                 .map(|pane| {
                     let content = tmux::capture_pane(&pane.id);
                     let new_state = detect_state(&content);
+                    let permission_mode = detect_permission_mode(&content);
                     let state_changed_at = prev
                         .iter()
                         .find(|s| s.pane.id == pane.id && s.state == new_state)
@@ -52,6 +55,7 @@ pub fn start_polling(state: Arc<Mutex<MonitorState>>) {
                     ClaudeSession {
                         pane,
                         state: new_state,
+                        permission_mode,
                         state_changed_at,
                     }
                 })
