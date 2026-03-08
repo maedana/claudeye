@@ -2,10 +2,16 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-03-09
+
 ### Added
 
 - `permission_mode` integration: overlay and picker now display each session's permission mode (Ask / Auto Edit / Plan)
   - Uses `detect_permission_mode()` from tmux-claude-state 0.3.0
+
+### Fixed
+
+- Update tmux-claude-state to 0.3.1 to fix intermittent missed Running state detection
 
 ## [0.8.0] - 2026-03-05
 
@@ -164,7 +170,8 @@
 - Project renamed from `ccmonitor` to `claudeye`
 - Overlay window height adjusts dynamically per session row count
 
-[Unreleased]: https://github.com/maedana/claudeye/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/maedana/claudeye/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/maedana/claudeye/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/maedana/claudeye/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/maedana/claudeye/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/maedana/claudeye/compare/v0.7.0...v0.7.1
