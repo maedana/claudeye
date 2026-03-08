@@ -156,7 +156,7 @@ fn running_pattern() -> &'static Regex {
     static P: OnceLock<Regex> = OnceLock::new();
     P.get_or_init(|| {
         // Format 1: (esc to interrupt · 1m 45s · ...) — time after middle dot
-        Regex::new(r"(?m)^[✢✽✶✻·]\s+.+?…?\s*\([^)]*·\s*((?:\d+[smh]\s*)+)").unwrap()
+        Regex::new(r"(?m)^[✢✽✶✻·*]\s+.+?…?\s*\([^)]*·\s*((?:\d+[smh]\s*)+)").unwrap()
     })
 }
 
@@ -164,13 +164,13 @@ fn running_pattern_time_first() -> &'static Regex {
     static P: OnceLock<Regex> = OnceLock::new();
     P.get_or_init(|| {
         // Format 2: (1m 52s · ...) — time at beginning of parentheses
-        Regex::new(r"(?m)^[✢✽✶✻·]\s+.+?…?\s*\(((?:\d+[smh]\s*)+)\s*·").unwrap()
+        Regex::new(r"(?m)^[✢✽✶✻·*]\s+.+?…?\s*\(((?:\d+[smh]\s*)+)\s*·").unwrap()
     })
 }
 
 fn running_fallback_pattern() -> &'static Regex {
     static P: OnceLock<Regex> = OnceLock::new();
-    P.get_or_init(|| Regex::new(r"(?m)^[✢✽✶✻·]\s+.+?…?\s*\((esc|ctrl\+c) to interrupt").unwrap())
+    P.get_or_init(|| Regex::new(r"(?m)^[✢✽✶✻·*]\s+.+?…?\s*\((esc|ctrl\+c) to interrupt").unwrap())
 }
 
 fn esc_to_interrupt_end_pattern() -> &'static Regex {
@@ -182,7 +182,7 @@ fn running_generic_pattern() -> &'static Regex {
     static P: OnceLock<Regex> = OnceLock::new();
     P.get_or_init(|| {
         // ^ excludes indented lines (quoted text)
-        Regex::new(r"(?m)^[✢✽✶✻·]\s+.+?…").unwrap()
+        Regex::new(r"(?m)^[✢✽✶✻·*]\s+.+?…").unwrap()
     })
 }
 

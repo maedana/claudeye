@@ -366,6 +366,14 @@ fn running_with_thought_for_without_middle_dot() {
 }
 
 #[test]
+fn running_with_asterisk_symbol() {
+    // * (U+002A) is used as a spinner symbol in Claude Code status line
+    let content = "Some output\n\
+* Unfurling… (esc to interrupt · 10s · ↓ 500 tokens)";
+    assert_eq!(detect_state(content), ClaudeState::Working);
+}
+
+#[test]
 fn unknown_state_falls_back_to_idle() {
     let content = "Some random output\n\
 without any recognizable pattern";
