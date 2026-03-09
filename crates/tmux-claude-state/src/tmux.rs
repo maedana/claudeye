@@ -16,7 +16,10 @@ pub struct PaneInfo {
     #[allow(dead_code)]
     pub cwd: String,
     /// Basename of [`cwd`](Self::cwd), used as a short project label.
+    /// For worktree directories, this is the basename of the original repository.
     pub project_name: String,
+    /// If the pane is running in a git worktree, the worktree directory basename.
+    pub worktree_name: Option<String>,
 }
 
 /// List all tmux panes across every session that are running Claude Code.
@@ -61,18 +64,48 @@ fn parse_pane_line_with_versions(line: &str, version_names: &HashSet<String>) ->
         return None;
     }
 
-    let project_name = std::path::Path::new(&cwd)
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("unknown")
-        .to_string();
+    let (project_name, worktree_name) = resolve_project_name(&cwd);
 
     Some(PaneInfo {
         id,
         pid,
         cwd,
         project_name,
+        worktree_name,
     })
+}
+
+/// Resolve project name from a cwd path. If the cwd is a git worktree,
+/// returns the original repository's basename as project_name and the
+/// worktree directory's basename as worktree_name.
+fn resolve_project_name(cwd: &str) -> (String, Option<String>) {
+    let cwd_path = std::path::Path::new(cwd);
+    let basename = cwd_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    let dot_git = cwd_path.join(".git");
+    // Worktree: .git is a file containing "gitdir: /path/to/original/.git/worktrees/<name>"
+    if dot_git.is_file()
+        && let Ok(content) = std::fs::read_to_string(&dot_git)
+        && let Some(gitdir) = content.trim().strip_prefix("gitdir: ")
+    {
+        let gitdir_path = std::path::Path::new(gitdir);
+        // gitdir is like: /path/to/original-repo/.git/worktrees/<name>
+        // Go up 3 levels to get original repo path: worktrees -> .git -> original-repo
+        if let Some(original_repo) = gitdir_path
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+            && let Some(name) = original_repo.file_name().and_then(|n| n.to_str())
+        {
+            return (name.to_string(), Some(basename));
+        }
+    }
+
+    (basename, None)
 }
 
 /// Parse a single line of `tmux list-panes` output into a [`PaneInfo`].

@@ -42,6 +42,40 @@ fn project_name_is_basename_of_cwd() {
     assert_eq!(pane.project_name, "claudeye");
 }
 
+#[test]
+fn non_worktree_has_no_worktree_name() {
+    let line = "main:0.1 12345 /home/user/projects/myapp claude";
+    let pane = parse_pane_line(line).unwrap();
+    assert_eq!(pane.worktree_name, None);
+}
+
+#[test]
+fn worktree_resolves_original_project_name() {
+    // Create a fake git worktree structure
+    let dir = std::env::temp_dir().join(format!("tmux_wt_test_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+
+    // Original repo at dir/original-repo/.git (directory)
+    let original_git = dir.join("original-repo").join(".git");
+    std::fs::create_dir_all(&original_git).unwrap();
+
+    // Worktree at dir/my-worktree/.git (file pointing to original)
+    let wt_dir = dir.join("my-worktree");
+    std::fs::create_dir_all(&wt_dir).unwrap();
+    std::fs::write(
+        wt_dir.join(".git"),
+        format!("gitdir: {}/.git/worktrees/my-worktree", dir.join("original-repo").display()),
+    )
+    .unwrap();
+
+    let line = format!("main:0.1 12345 {} claude", wt_dir.display());
+    let pane = parse_pane_line(&line).unwrap();
+    assert_eq!(pane.project_name, "original-repo");
+    assert_eq!(pane.worktree_name, Some("my-worktree".to_string()));
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// On macOS, tmux reports the resolved symlink target name (e.g. "2.1.50")
 /// instead of "claude". Multiple versions may coexist in the versions
 /// directory, so all of them should be detected.
