@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-03-14
+
+### Fixed
+
+- Prevent focus steal when launching overlay on X11 (winit issue #1160)
+  - Uses `xdotool` to save and restore the active window around overlay spawn
+  - Silently skipped on Wayland or when `xdotool` is not installed
+
+### Changed
+
+- Set `X11WindowType::Utility` on overlay viewport for better window manager hints
+
 ## [0.8.1] - 2026-03-09
 
 ### Added
