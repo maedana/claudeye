@@ -248,6 +248,7 @@ fn crmux_to_claude_sessions(crmux_sessions: &[CrmuxSession]) -> Vec<ClaudeSessio
                     pid: cs.pid,
                     cwd: String::new(),
                     project_name: cs.project_name.clone(),
+                    worktree_name: None,
                 },
                 state,
                 permission_mode: tmux_claude_state::claude_state::PermissionMode::AskBeforeEdits,
@@ -310,9 +311,34 @@ fn run_gui(
             .with_mouse_passthrough(true)
             .with_inner_size([MIN_WINDOW_WIDTH, WINDOW_EMPTY_HEIGHT])
             .with_transparent(true)
-            .with_active(false),
+            .with_active(false)
+            .with_window_type(egui::X11WindowType::Utility),
         ..Default::default()
     };
+
+    // Work around winit X11 ignoring with_active(false) (winit issue #1160):
+    // save the currently focused window and restore focus after the overlay spawns.
+    if std::env::var("XDG_SESSION_TYPE")
+        .map(|v| v == "x11")
+        .unwrap_or(false)
+        && let Some(window_id) = std::process::Command::new("xdotool")
+            .args(["getactivewindow"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|id| !id.is_empty())
+    {
+        std::thread::spawn(move || {
+            // Wait for the overlay window to appear, then restore focus.
+            let _ = std::process::Command::new("xdotool")
+                .args(["search", "--sync", "--name", "claudeye"])
+                .output();
+            let _ = std::process::Command::new("xdotool")
+                .args(["windowactivate", &window_id])
+                .status();
+        });
+    }
 
     eframe::run_native(
         "claudeye",
@@ -926,6 +952,7 @@ mod tests {
                 pid: 1,
                 cwd: "/tmp".to_string(),
                 project_name: "test-project".to_string(),
+                worktree_name: None,
             },
             state,
             permission_mode: tmux_claude_state::claude_state::PermissionMode::AskBeforeEdits,

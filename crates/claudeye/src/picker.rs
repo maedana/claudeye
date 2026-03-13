@@ -179,6 +179,7 @@ mod tests {
                 pid: 0,
                 cwd: "/tmp".to_string(),
                 project_name: "test".to_string(),
+                worktree_name: None,
             },
             state: ClaudeState::Idle,
             permission_mode: tmux_claude_state::claude_state::PermissionMode::AskBeforeEdits,
