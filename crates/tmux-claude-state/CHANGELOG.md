@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-16
+
 ### Fixed
 
 - Fix Approval state misdetected as Running when spinner line persists during approval dialogs
@@ -72,7 +74,8 @@
 - Tmux helpers: `list_panes`, `capture_pane`, `switch_client`
 - Version cache for detecting claude binary names in tmux pane commands
 
-[Unreleased]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.4.0...HEAD
+[Unreleased]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.4.1...HEAD
+[0.4.1]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.4.0...tmux-claude-state-v0.4.1
 [0.4.0]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.3.1...tmux-claude-state-v0.4.0
 [0.3.1]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.3.0...tmux-claude-state-v0.3.1
 [0.3.0]: https://github.com/maedana/claudeye/compare/tmux-claude-state-v0.2.0...tmux-claude-state-v0.3.0

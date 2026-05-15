@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-05-16
+
 ### Fixed
 
 - Update tmux-claude-state to fix Approval misdetected as Running when spinner line persists during approval dialogs
@@ -186,7 +188,9 @@
 - Project renamed from `ccmonitor` to `claudeye`
 - Overlay window height adjusts dynamically per session row count
 
-[Unreleased]: https://github.com/maedana/claudeye/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/maedana/claudeye/compare/v0.8.3...HEAD
+[0.8.3]: https://github.com/maedana/claudeye/compare/v0.8.2...v0.8.3
+[0.8.2]: https://github.com/maedana/claudeye/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/maedana/claudeye/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/maedana/claudeye/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/maedana/claudeye/compare/v0.7.1...v0.7.2
