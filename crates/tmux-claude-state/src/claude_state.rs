@@ -83,28 +83,16 @@ pub fn detect_state(content: &str) -> ClaudeState {
     let last_lines = last_non_empty_lines(&lines, LAST_LINES_COUNT);
     let combined = last_lines.join("\n");
 
-    // Running check (highest priority)
-    // Format 1: (esc to interrupt · 1m 45s · ...) — time after middle dot
-    if running_pattern().is_match(&combined) {
-        return ClaudeState::Working;
-    }
+    let is_running = running_pattern().is_match(&combined)
+        || running_pattern_time_first().is_match(&combined)
+        || running_fallback_pattern().is_match(&combined)
+        || esc_to_interrupt_end_pattern().is_match(&combined)
+        || running_generic_pattern().is_match(&combined);
 
-    // Format 2: (1m 52s · ...) — time at beginning of parentheses
-    if running_pattern_time_first().is_match(&combined) {
-        return ClaudeState::Working;
-    }
-
-    // Fallback: "(esc to interrupt)" or "(ctrl+c to interrupt)" — no time
-    if running_fallback_pattern().is_match(&combined) {
-        return ClaudeState::Working;
-    }
-
-    if esc_to_interrupt_end_pattern().is_match(&combined) {
-        return ClaudeState::Working;
-    }
-
-    // Catches the initial thinking phase before a timer appears (e.g., "(thinking)")
-    if running_generic_pattern().is_match(&combined) {
+    if is_running {
+        if has_approval_signal(&combined) {
+            return ClaudeState::WaitingForApproval;
+        }
         return ClaudeState::Working;
     }
 
@@ -112,17 +100,7 @@ pub fn detect_state(content: &str) -> ClaudeState {
         return ClaudeState::Idle;
     }
 
-    for &pattern in WAITING_PATTERNS.iter() {
-        if combined.contains(pattern) {
-            return ClaudeState::WaitingForApproval;
-        }
-    }
-
-    if interview_pattern().is_match(&combined) {
-        return ClaudeState::WaitingForApproval;
-    }
-
-    if selection_menu_pattern().is_match(&combined) {
+    if has_approval_signal(&combined) {
         return ClaudeState::WaitingForApproval;
     }
 
@@ -228,6 +206,21 @@ fn last_non_empty_lines<'a>(lines: &[&'a str], n: usize) -> Vec<&'a str> {
 /// Returns true for empty strings (matches Go's isSeparatorLine behavior).
 fn is_separator_line(line: &str) -> bool {
     line.chars().all(|c| ('\u{2500}'..='\u{257F}').contains(&c))
+}
+
+fn has_approval_signal(combined: &str) -> bool {
+    for &pattern in WAITING_PATTERNS.iter() {
+        if combined.contains(pattern) {
+            return true;
+        }
+    }
+    if interview_pattern().is_match(combined) {
+        return true;
+    }
+    if selection_menu_pattern().is_match(combined) {
+        return true;
+    }
+    false
 }
 
 fn is_claude_prompt_line(lines: &[&str]) -> bool {

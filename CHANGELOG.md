@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Update tmux-claude-state to fix Approval misdetected as Running when spinner line persists during approval dialogs
+
 ## [0.8.2] - 2026-03-14
 
 ### Fixed

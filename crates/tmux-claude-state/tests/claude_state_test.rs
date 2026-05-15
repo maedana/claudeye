@@ -471,3 +471,41 @@ fn permission_mode_display_labels() {
     );
     assert_eq!(PermissionMode::PlanMode.display_label(), "Plan");
 }
+
+#[test]
+fn waiting_approval_dialog_with_running_spinner_present() {
+    let content = "\
+⏺ Bash(some-command --flag)\n\
+  ⎿  Running…\n\
+\n\
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────\n\
+ Bash command\n\
+\n\
+   some-command --flag\n\
+\n\
+ Do you want to proceed?\n\
+ ❯ 1. Yes\n\
+   2. Yes, and don't ask again for this command\n\
+   3. No\n\
+\n\
+ Esc to cancel · Tab to amend · ctrl+e to explain\n\
+\n\
+* Philosophising~ (3m 37s · ↓ 991 tokens)";
+    assert_eq!(detect_state(content), ClaudeState::WaitingForApproval);
+}
+
+#[test]
+fn waiting_interview_mode_with_running_spinner_present() {
+    let content = "\
+  1. コードのレビュー\n\
+  2. バグの修正\n\
+  3. ドキュメントのレビュー\n\
+  4. Issue の修正\n\
+  5. Type something.\n\
+  Chat about this\n\
+  Skip interview and plan immediately\n\
+Enter to select · ↑/↓ to navigate · Esc to cancel\n\
+\n\
+* Philosophising~ (3m 37s · ↓ 991 tokens)";
+    assert_eq!(detect_state(content), ClaudeState::WaitingForApproval);
+}

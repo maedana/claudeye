@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix Approval state misdetected as Running when spinner line persists during approval dialogs
+  - Claude Code v2.1.141+ keeps the spinner status (e.g. `* Philosophising~ (3m 37s · ↓ 991 tokens)`) visible during AskUserQuestion and permission prompts
+  - Approval signals now take precedence over running patterns when both are present
+
 ## [0.4.0] - 2026-03-10
 
 ### Added
