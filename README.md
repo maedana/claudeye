@@ -2,6 +2,21 @@
 
 A transparent always-on-top overlay that monitors Claude Code sessions running in tmux panes.
 
+## Project status
+
+claudeye is in **maintenance mode**. I've since moved to
+[herdr](https://github.com/herdrdev/herdr), where my own plugin
+[herdr-agents-status](https://github.com/maedana/herdr-agents-status) does the
+same job — so I no longer use claudeye day to day. If you're looking for
+something actively developed, start there.
+
+- Obvious bugs will still get fixed
+- No new features are planned
+- Compatibility with future Claude Code changes is not guaranteed
+
+Issues and PRs are welcome, but responses may be slow. Forks are encouraged if
+you want to take it further.
+
 ## What it does
 
 claudeye periodically polls all tmux panes, finds those running the `claude` command, and displays their status in a small floating window at the top center of your screen. The window is click-through, so it never interferes with your workflow.
